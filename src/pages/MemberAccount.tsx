@@ -1,21 +1,29 @@
 import { useState, useMemo } from 'react';
-import { Users, Wallet, Shield, Award, TrendingUp, CreditCard, Search, Plus, Download, ChevronRight, Star } from 'lucide-react';
-import { members } from '@/data/members';
+import { Users, Wallet, Shield, Award, TrendingUp, CreditCard, Search, Plus, Download, ChevronRight, Star, X, ArrowUpRight, ArrowDownLeft, Edit3 } from 'lucide-react';
+import { useAppStore } from '@/store';
 import { getMemberLevelText, getMemberLevelColor, formatCurrency, formatDate } from '@/utils/format';
+import type { Member } from '@/types';
 
 export default function MemberAccount() {
+  const { members, transactions, rechargeMember, refundDeposit, updateMemberLevel } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [levelFilter, setLevelFilter] = useState<string>('all');
-  const [selectedMember, setSelectedMember] = useState<typeof members[0] | null>(members[0]);
+  const [selectedMember, setSelectedMember] = useState<Member | null>(members[0] || null);
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [showLevelModal, setShowLevelModal] = useState(false);
+  const [rechargeAmount, setRechargeAmount] = useState(100);
+  const [refundAmount, setRefundAmount] = useState(500);
+  const [newLevel, setNewLevel] = useState<Member['level']>('normal');
 
   const stats = useMemo(() => {
     const total = members.length;
     const totalBalance = members.reduce((sum, m) => sum + m.balance, 0);
     const totalDeposit = members.reduce((sum, m) => sum + m.deposit, 0);
     const totalRevenue = members.reduce((sum, m) => sum + m.totalSpent, 0);
-    const avgSpent = Math.round(totalRevenue / total);
+    const avgSpent = total > 0 ? Math.round(totalRevenue / total) : 0;
     return { total, totalBalance, totalDeposit, totalRevenue, avgSpent };
-  }, []);
+  }, [members]);
 
   const levelDistribution = useMemo(() => {
     return [
@@ -24,7 +32,7 @@ export default function MemberAccount() {
       { level: 'silver', name: '白银会员', count: members.filter(m => m.level === 'silver').length, color: '#64748B' },
       { level: 'normal', name: '普通会员', count: members.filter(m => m.level === 'normal').length, color: '#9CA3AF' },
     ];
-  }, []);
+  }, [members]);
 
   const filteredMembers = members.filter((member) => {
     const matchesSearch = member.name.includes(searchQuery) || 
@@ -33,13 +41,28 @@ export default function MemberAccount() {
     return matchesSearch && matchesLevel;
   });
 
-  const transactions = [
-    { id: 1, type: '消费', amount: -99.0, time: '2026-06-07 10:30', site: '中关村智能补能站' },
-    { id: 2, type: '充值', amount: 500.0, time: '2026-06-06 15:20', site: '-' },
-    { id: 3, type: '消费', amount: -45.5, time: '2026-06-05 14:10', site: '望京科创园站' },
-    { id: 4, type: '退款', amount: 28.0, time: '2026-06-04 16:45', site: '订单取消' },
-    { id: 5, type: '消费', amount: -99.0, time: '2026-06-03 09:00', site: '海淀软件园站' },
-  ];
+  const handleRecharge = () => {
+    if (selectedMember && rechargeAmount > 0) {
+      rechargeMember(selectedMember.id, rechargeAmount);
+      setShowRechargeModal(false);
+      setRechargeAmount(100);
+    }
+  };
+
+  const handleRefund = () => {
+    if (selectedMember && refundAmount > 0 && refundAmount <= selectedMember.deposit) {
+      refundDeposit(selectedMember.id, refundAmount);
+      setShowRefundModal(false);
+      setRefundAmount(500);
+    }
+  };
+
+  const handleUpdateLevel = () => {
+    if (selectedMember) {
+      updateMemberLevel(selectedMember.id, newLevel);
+      setShowLevelModal(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -229,13 +252,28 @@ export default function MemberAccount() {
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button className="flex-1 py-2.5 bg-blue-500 text-white rounded-lg font-medium text-sm hover:bg-blue-600 transition-colors">
+                <button 
+                  onClick={() => setShowRechargeModal(true)}
+                  className="flex-1 py-2.5 bg-blue-500 text-white rounded-lg font-medium text-sm hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <ArrowUpRight className="w-4 h-4" />
                   充值
                 </button>
-                <button className="flex-1 py-2.5 bg-green-500 text-white rounded-lg font-medium text-sm hover:bg-green-600 transition-colors">
+                <button 
+                  onClick={() => setShowRefundModal(true)}
+                  className="flex-1 py-2.5 bg-green-500 text-white rounded-lg font-medium text-sm hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <ArrowDownLeft className="w-4 h-4" />
                   退还押金
                 </button>
-                <button className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium text-sm hover:bg-slate-200 transition-colors">
+                <button 
+                  onClick={() => {
+                    setNewLevel(selectedMember.level);
+                    setShowLevelModal(true);
+                  }}
+                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium text-sm hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Edit3 className="w-4 h-4" />
                   调整等级
                 </button>
               </div>
@@ -262,28 +300,30 @@ export default function MemberAccount() {
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-4">最近交易</h3>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[300px] overflow-y-auto">
               {transactions.map((tx) => (
                 <div key={tx.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      tx.amount > 0 ? 'bg-green-100' : 'bg-blue-100'
+                      tx.amount > 0 ? 'bg-green-100' : tx.amount < 0 ? 'bg-red-100' : 'bg-blue-100'
                     }`}>
                       {tx.amount > 0 ? (
                         <Plus className="w-4 h-4 text-green-600" />
+                      ) : tx.amount < 0 ? (
+                        <CreditCard className="w-4 h-4 text-red-600" />
                       ) : (
-                        <CreditCard className="w-4 h-4 text-blue-600" />
+                        <Edit3 className="w-4 h-4 text-blue-600" />
                       )}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-800">{tx.type}</p>
-                      <p className="text-xs text-slate-500">{tx.site} · {tx.time}</p>
+                      <p className="text-sm font-medium text-slate-800">{tx.description}</p>
+                      <p className="text-xs text-slate-500">{tx.createdAt}</p>
                     </div>
                   </div>
                   <span className={`text-sm font-semibold ${
-                    tx.amount > 0 ? 'text-green-600' : 'text-slate-700'
+                    tx.amount > 0 ? 'text-green-600' : tx.amount < 0 ? 'text-red-600' : 'text-slate-600'
                   }`}>
-                    {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                    {tx.amount > 0 ? '+' : ''}{tx.amount !== 0 ? formatCurrency(tx.amount) : '-'}
                   </span>
                 </div>
               ))}
@@ -291,6 +331,156 @@ export default function MemberAccount() {
           </div>
         </div>
       </div>
+
+      {showRechargeModal && selectedMember && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">账户充值</h3>
+              <button onClick={() => setShowRechargeModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-4 p-4 bg-blue-50 rounded-xl">
+              <p className="text-sm text-slate-500">当前余额</p>
+              <p className="text-2xl font-bold text-blue-600">{formatCurrency(selectedMember.balance)}</p>
+            </div>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-slate-700 mb-2">充值金额</label>
+              <div className="grid grid-cols-4 gap-2 mb-3">
+                {[50, 100, 200, 500].map((amount) => (
+                  <button
+                    key={amount}
+                    onClick={() => setRechargeAmount(amount)}
+                    className={`py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                      rechargeAmount === amount
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-slate-200 hover:border-blue-300'
+                    }`}
+                  >
+                    ¥{amount}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="number"
+                value={rechargeAmount}
+                onChange={(e) => setRechargeAmount(parseInt(e.target.value) || 0)}
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="自定义金额"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRechargeModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRecharge}
+                className="flex-1 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:shadow-lg"
+              >
+                确认充值
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRefundModal && selectedMember && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">退还押金</h3>
+              <button onClick={() => setShowRefundModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-4 p-4 bg-yellow-50 rounded-xl">
+              <p className="text-sm text-slate-500">当前押金</p>
+              <p className="text-2xl font-bold text-yellow-600">{formatCurrency(selectedMember.deposit)}</p>
+            </div>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-slate-700 mb-2">退还金额</label>
+              <input
+                type="number"
+                value={refundAmount}
+                max={selectedMember.deposit}
+                onChange={(e) => setRefundAmount(Math.min(parseInt(e.target.value) || 0, selectedMember.deposit))}
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="请输入退还金额"
+              />
+              <p className="text-xs text-slate-400 mt-2">最多可退还：{formatCurrency(selectedMember.deposit)}</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRefundModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRefund}
+                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:shadow-lg"
+              >
+                确认退还
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLevelModal && selectedMember && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">调整会员等级</h3>
+              <button onClick={() => setShowLevelModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-slate-700 mb-3">选择等级</label>
+              <div className="space-y-2">
+                {[
+                  { value: 'normal', label: '普通会员', discount: '无折扣', color: 'bg-slate-100 text-slate-700 border-slate-300' },
+                  { value: 'silver', label: '银卡会员', discount: '95折', color: 'bg-slate-50 text-slate-600 border-slate-400' },
+                  { value: 'gold', label: '金卡会员', discount: '9折', color: 'bg-amber-50 text-amber-700 border-amber-400' },
+                  { value: 'platinum', label: '铂金会员', discount: '85折', color: 'bg-purple-50 text-purple-700 border-purple-400' },
+                ].map((level) => (
+                  <button
+                    key={level.value}
+                    onClick={() => setNewLevel(level.value as Member['level'])}
+                    className={`w-full p-3 rounded-lg text-left border-2 transition-all flex items-center justify-between ${
+                      newLevel === level.value
+                        ? level.color + ' border-2'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="font-medium">{level.label}</span>
+                    <span className="text-sm">{level.discount}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLevelModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleUpdateLevel}
+                className="flex-1 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:shadow-lg"
+              >
+                确认调整
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

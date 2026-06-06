@@ -1,35 +1,95 @@
 import { useState, useMemo } from 'react';
 import { BarChart3, TrendingUp, Users, Zap, BatteryCharging, DollarSign, Star, Download, Calendar, ChevronDown, MessageSquare, ThumbsUp } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell, Legend } from 'recharts';
-import { reportData, reviews } from '@/data/reports';
+import { reviews } from '@/data/reports';
 import { formatCurrency, formatDate } from '@/utils/format';
+
+const dataByRange = {
+  day: {
+    report: [
+      { date: '08:00', totalRevenue: 320, totalOrders: 5, newMembers: 1, siteUtilization: 45, chargingOrders: 3, swapOrders: 2 },
+      { date: '09:00', totalRevenue: 680, totalOrders: 12, newMembers: 2, siteUtilization: 68, chargingOrders: 7, swapOrders: 5 },
+      { date: '10:00', totalRevenue: 920, totalOrders: 18, newMembers: 3, siteUtilization: 78, chargingOrders: 11, swapOrders: 7 },
+      { date: '11:00', totalRevenue: 780, totalOrders: 15, newMembers: 1, siteUtilization: 72, chargingOrders: 9, swapOrders: 6 },
+      { date: '12:00', totalRevenue: 450, totalOrders: 8, newMembers: 0, siteUtilization: 55, chargingOrders: 5, swapOrders: 3 },
+      { date: '14:00', totalRevenue: 580, totalOrders: 10, newMembers: 2, siteUtilization: 60, chargingOrders: 6, swapOrders: 4 },
+      { date: '15:00', totalRevenue: 820, totalOrders: 14, newMembers: 1, siteUtilization: 75, chargingOrders: 8, swapOrders: 6 },
+      { date: '16:00', totalRevenue: 950, totalOrders: 16, newMembers: 2, siteUtilization: 80, chargingOrders: 10, swapOrders: 6 },
+    ],
+    utilization: [
+      { name: '中关村', utilization: 82 },
+      { name: '望京', utilization: 88 },
+      { name: '亦庄', utilization: 65 },
+    ],
+    revenueType: [
+      { name: '充电服务', value: 62, color: '#3B82F6' },
+      { name: '换电服务', value: 38, color: '#10B981' },
+    ],
+  },
+  week: {
+    report: [
+      { date: '周一', totalRevenue: 4200, totalOrders: 68, newMembers: 12, siteUtilization: 62, chargingOrders: 40, swapOrders: 28 },
+      { date: '周二', totalRevenue: 4800, totalOrders: 75, newMembers: 15, siteUtilization: 68, chargingOrders: 44, swapOrders: 31 },
+      { date: '周三', totalRevenue: 5200, totalOrders: 82, newMembers: 18, siteUtilization: 72, chargingOrders: 48, swapOrders: 34 },
+      { date: '周四', totalRevenue: 4600, totalOrders: 72, newMembers: 10, siteUtilization: 65, chargingOrders: 42, swapOrders: 30 },
+      { date: '周五', totalRevenue: 5800, totalOrders: 95, newMembers: 22, siteUtilization: 78, chargingOrders: 55, swapOrders: 40 },
+      { date: '周六', totalRevenue: 6200, totalOrders: 105, newMembers: 25, siteUtilization: 82, chargingOrders: 62, swapOrders: 43 },
+      { date: '周日', totalRevenue: 5500, totalOrders: 88, newMembers: 18, siteUtilization: 75, chargingOrders: 52, swapOrders: 36 },
+    ],
+    utilization: [
+      { name: '中关村', utilization: 78 },
+      { name: '望京', utilization: 85 },
+      { name: '亦庄', utilization: 62 },
+      { name: '海淀', utilization: 72 },
+      { name: '通州', utilization: 68 },
+      { name: '丰台', utilization: 92 },
+    ],
+    revenueType: [
+      { name: '充电服务', value: 58, color: '#3B82F6' },
+      { name: '换电服务', value: 42, color: '#10B981' },
+    ],
+  },
+  month: {
+    report: [
+      { date: '第1周', totalRevenue: 32000, totalOrders: 520, newMembers: 85, siteUtilization: 65, chargingOrders: 300, swapOrders: 220 },
+      { date: '第2周', totalRevenue: 35000, totalOrders: 580, newMembers: 92, siteUtilization: 68, chargingOrders: 340, swapOrders: 240 },
+      { date: '第3周', totalRevenue: 38000, totalOrders: 620, newMembers: 98, siteUtilization: 72, chargingOrders: 360, swapOrders: 260 },
+      { date: '第4周', totalRevenue: 42000, totalOrders: 680, newMembers: 105, siteUtilization: 75, chargingOrders: 400, swapOrders: 280 },
+    ],
+    utilization: [
+      { name: '中关村', utilization: 75 },
+      { name: '望京', utilization: 82 },
+      { name: '亦庄', utilization: 60 },
+      { name: '海淀', utilization: 70 },
+      { name: '通州', utilization: 65 },
+      { name: '昌平', utilization: 55 },
+      { name: '丰台', utilization: 88 },
+      { name: '大兴', utilization: 58 },
+    ],
+    revenueType: [
+      { name: '充电服务', value: 55, color: '#3B82F6' },
+      { name: '换电服务', value: 45, color: '#10B981' },
+    ],
+  },
+};
 
 export default function BusinessReports() {
   const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month'>('week');
 
+  const currentData = useMemo(() => dataByRange[timeRange], [timeRange]);
+
   const summaryStats = useMemo(() => {
-    const totalRevenue = reportData.reduce((sum, d) => sum + d.totalRevenue, 0);
-    const totalOrders = reportData.reduce((sum, d) => sum + d.totalOrders, 0);
-    const totalNewMembers = reportData.reduce((sum, d) => sum + d.newMembers, 0);
-    const avgUtilization = Math.round(reportData.reduce((sum, d) => sum + d.siteUtilization, 0) / reportData.length);
+    const data = currentData.report;
+    const totalRevenue = data.reduce((sum, d) => sum + d.totalRevenue, 0);
+    const totalOrders = data.reduce((sum, d) => sum + d.totalOrders, 0);
+    const totalNewMembers = data.reduce((sum, d) => sum + d.newMembers, 0);
+    const avgUtilization = Math.round(data.reduce((sum, d) => sum + d.siteUtilization, 0) / data.length);
     const avgOrderValue = Math.round(totalRevenue / totalOrders);
     return { totalRevenue, totalOrders, totalNewMembers, avgUtilization, avgOrderValue };
-  }, []);
+  }, [currentData]);
 
-  const revenueByType = [
-    { name: '充电服务', value: 58, color: '#3B82F6' },
-    { name: '换电服务', value: 42, color: '#10B981' },
-  ];
-
-  const siteUtilizationData = [
-    { name: '中关村', utilization: 78 },
-    { name: '望京', utilization: 85 },
-    { name: '亦庄', utilization: 62 },
-    { name: '海淀', utilization: 72 },
-    { name: '通州', utilization: 68 },
-    { name: '昌平', utilization: 55 },
-    { name: '丰台', utilization: 92 },
-  ];
+  const siteUtilizationData = currentData.utilization;
+  const revenueByType = currentData.revenueType;
 
   const averageRating = useMemo(() => {
     return (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1);
@@ -134,7 +194,7 @@ export default function BusinessReports() {
           <h3 className="text-lg font-semibold text-slate-800 mb-4">营收趋势</h3>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={reportData}>
+              <AreaChart data={currentData.report}>
                 <defs>
                   <linearGradient id="colorRevenue2" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
@@ -205,7 +265,7 @@ export default function BusinessReports() {
           <h3 className="text-lg font-semibold text-slate-800 mb-4">订单量趋势</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={reportData}>
+              <LineChart data={currentData.report}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#94A3B8" />
                 <YAxis tick={{ fontSize: 12 }} stroke="#94A3B8" />

@@ -1,15 +1,26 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { Search, Filter, Zap, BatteryCharging, Clock, Users, MapPin, ChevronRight } from 'lucide-react';
 import { sites } from '@/data/sites';
 import type { Site } from '@/types';
 import { getStatusText, getStatusColor, getServiceTypeText } from '@/utils/format';
+import { useAppStore } from '@/store';
 import 'leaflet/dist/leaflet.css';
 
 export default function SiteMap() {
+  const navigate = useNavigate();
+  const setPreselectedBookingSite = useAppStore((state) => state.setPreselectedBookingSite);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
+
+  const handleBookNow = () => {
+    if (selectedSite) {
+      setPreselectedBookingSite(selectedSite);
+      navigate('/bookings');
+    }
+  };
 
   const filteredSites = sites.filter((site) => {
     const matchesSearch = site.name.includes(searchQuery) || site.address.includes(searchQuery);
@@ -147,7 +158,10 @@ export default function SiteMap() {
                 <h3 className="font-bold text-slate-800">{selectedSite.name}</h3>
                 <p className="text-sm text-slate-500">{selectedSite.address}</p>
               </div>
-              <button className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium text-sm hover:shadow-lg transition-all flex items-center gap-2">
+              <button 
+                onClick={handleBookNow}
+                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium text-sm hover:shadow-lg transition-all flex items-center gap-2"
+              >
                 立即预约
                 <ChevronRight className="w-4 h-4" />
               </button>

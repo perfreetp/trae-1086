@@ -1,22 +1,27 @@
 import { useState, useMemo } from 'react';
-import { Receipt, Zap, BatteryCharging, Clock, MapPin, User, Search, Filter, Download, ChevronRight } from 'lucide-react';
+import { Receipt, Zap, BatteryCharging, Clock, MapPin, User, Search, Filter, Download, ChevronRight, CheckCircle, FileText, CreditCard, X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { chargingRecords } from '@/data/records';
+import { useAppStore } from '@/store';
 import { getStatusText, getStatusColor, getServiceTypeText, formatCurrency, formatDateTime, formatDuration } from '@/utils/format';
+import type { ChargingRecord } from '@/types';
 
 export default function ChargingRecords() {
+  const { records, settleRecord, applyInvoice } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [showSettleModal, setShowSettleModal] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<ChargingRecord | null>(null);
 
   const stats = useMemo(() => {
-    const todayRecords = chargingRecords.filter(r => r.startTime.includes('2026-06-07'));
+    const todayRecords = records.filter(r => r.startTime.includes('2026-06-07'));
     const totalAmount = todayRecords.reduce((sum, r) => sum + r.amount, 0);
     const chargingCount = todayRecords.filter(r => r.type === 'charging').length;
     const swapCount = todayRecords.filter(r => r.type === 'battery-swap').length;
     const inProgress = todayRecords.filter(r => r.status === 'charging').length;
     return { totalAmount, chargingCount, swapCount, inProgress, total: todayRecords.length };
-  }, []);
+  }, [records]);
 
   const chartData = [
     { time: '08:00', orders: 5, revenue: 420 },
@@ -29,7 +34,7 @@ export default function ChargingRecords() {
     { time: '16:00', orders: 16, revenue: 1360 },
   ];
 
-  const filteredRecords = chargingRecords.filter((record) => {
+  const filteredRecords = records.filter((record) => {
     const matchesSearch = record.userName.includes(searchQuery) || 
                           record.siteName.includes(searchQuery) ||
                           record.id.includes(searchQuery);
@@ -38,7 +43,33 @@ export default function ChargingRecords() {
     return matchesSearch && matchesType && matchesStatus;
   });
 
-  const inProgressRecords = chargingRecords.filter(r => r.status === 'charging');
+  const inProgressRecords = records.filter(r => r.status === 'charging');
+
+  const handleSettle = (record: ChargingRecord) => {
+    setSelectedRecord(record);
+    setShowSettleModal(true);
+  };
+
+  const handleApplyInvoice = (record: ChargingRecord) => {
+    setSelectedRecord(record);
+    setShowInvoiceModal(true);
+  };
+
+  const confirmSettle = () => {
+    if (selectedRecord) {
+      settleRecord(selectedRecord.id);
+      setShowSettleModal(false);
+      setSelectedRecord(null);
+    }
+  };
+
+  const confirmInvoice = () => {
+    if (selectedRecord) {
+      applyInvoice(selectedRecord.id);
+      setShowInvoiceModal(false);
+      setSelectedRecord(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -298,10 +329,41 @@ export default function ChargingRecords() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1">
-                      详情
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {record.status === 'completed' && !record.settled && (
+                        <button
+                          onClick={() => handleSettle(record)}
+                          className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors flex items-center gap-1"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          结算
+                        </button>
+                      )}
+                      {record.status === 'completed' && record.settled && !record.invoiceStatus && (
+                        <button
+                          onClick={() => handleApplyInvoice(record)}
+                          className="px-3 py-1.5 bg-green-50 text-green-600 rounded-lg text-sm font-medium hover:bg-green-100 transition-colors flex items-center gap-1"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          发票
+                        </button>
+                      )}
+                      {record.invoiceStatus === 'applied' && (
+                        <span className="px-3 py-1.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-medium flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          发票申请中
+                        </span>
+                      )}
+                      {record.invoiceStatus === 'issued' && (
+                        <span className="px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-sm font-medium flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          已开票
+                        </span>
+                      )}
+                      {record.settled && record.status === 'completed' && !record.invoiceStatus && (
+                        <span className="text-xs text-slate-400">已结算</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -309,6 +371,101 @@ export default function ChargingRecords() {
           </table>
         </div>
       </div>
+
+      {showSettleModal && selectedRecord && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">费用结算</h3>
+              <button onClick={() => setShowSettleModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div className="p-4 bg-slate-50 rounded-xl">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-slate-500">订单编号</span>
+                  <span className="text-sm font-mono text-slate-700">{selectedRecord.id}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-slate-500">服务类型</span>
+                  <span className="text-sm text-slate-700">{getServiceTypeText(selectedRecord.type)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-500">结算金额</span>
+                  <span className="text-xl font-bold text-blue-600">{formatCurrency(selectedRecord.amount)}</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSettleModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmSettle}
+                className="flex-1 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:shadow-lg"
+              >
+                确认结算
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showInvoiceModal && selectedRecord && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">申请发票</h3>
+              <button onClick={() => setShowInvoiceModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div className="p-4 bg-green-50 rounded-xl mb-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-500">可开票金额</span>
+                  <span className="text-xl font-bold text-green-600">{formatCurrency(selectedRecord.amount)}</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">发票抬头</label>
+                <input
+                  type="text"
+                  defaultValue="个人"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="请输入发票抬头"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">电子邮箱</label>
+                <input
+                  type="email"
+                  placeholder="用于接收电子发票"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowInvoiceModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmInvoice}
+                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:shadow-lg"
+              >
+                提交申请
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

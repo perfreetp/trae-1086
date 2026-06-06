@@ -1,63 +1,160 @@
 import { useState, useMemo } from 'react';
-import { Battery, BatteryCharging, Activity, RefreshCw, Search, Filter, Plus, BarChart3, AlertTriangle } from 'lucide-react';
-import { batteries } from '@/data/batteries';
+import { Battery, BatteryCharging, Activity, RefreshCw, Search, Filter, Plus, BarChart3, AlertTriangle, X, Save } from 'lucide-react';
+import { useAppStore } from '@/store';
 import { getStatusText, getStatusColor, formatCapacity, formatPercent, formatDateTime } from '@/utils/format';
+import type { Battery as BatteryType } from '@/types';
 
 export default function BatteryInventory() {
+  const {
+    batteries,
+    lastInventoryTime,
+    addBattery,
+    updateBatteryStatus,
+    updateInventoryTime,
+  } = useAppStore();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [modelFilter, setModelFilter] = useState<string>('all');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showSwapModal, setShowSwapModal] = useState(false);
+  const [selectedBattery, setSelectedBattery] = useState<BatteryType | null>(null);
+  const [swapCode, setSwapCode] = useState('');
+  const [inventoryMessage, setInventoryMessage] = useState('');
+
+  const [newBattery, setNewBattery] = useState({
+    serialNumber: '',
+    model: 'TB-48S',
+    capacity: 4500,
+    currentLevel: 100,
+    healthStatus: 100,
+    siteId: 'site-1',
+    location: '中关村智能补能站-A柜',
+  });
 
   const stats = useMemo(() => {
     const total = batteries.length;
-    const available = batteries.filter(b => b.status === 'available').length;
-    const charging = batteries.filter(b => b.status === 'charging').length;
-    const inUse = batteries.filter(b => b.status === 'in-use').length;
-    const maintenance = batteries.filter(b => b.status === 'maintenance').length;
-    const avgHealth = Math.round(batteries.reduce((sum, b) => sum + b.healthStatus, 0) / total);
+    const available = batteries.filter((b) => b.status === 'available').length;
+    const charging = batteries.filter((b) => b.status === 'charging').length;
+    const inUse = batteries.filter((b) => b.status === 'in-use').length;
+    const maintenance = batteries.filter((b) => b.status === 'maintenance').length;
+    const avgHealth = total > 0 ? Math.round(batteries.reduce((sum, b) => sum + b.healthStatus, 0) / total) : 0;
     return { total, available, charging, inUse, maintenance, avgHealth };
-  }, []);
+  }, [batteries]);
 
   const models = useMemo(() => {
-    return [...new Set(batteries.map(b => b.model))];
-  }, []);
+    return [...new Set(batteries.map((b) => b.model))];
+  }, [batteries]);
 
   const filteredBatteries = batteries.filter((battery) => {
-    const matchesSearch = battery.serialNumber.includes(searchQuery) || 
-                          battery.model.includes(searchQuery) ||
-                          battery.location.includes(searchQuery);
+    const matchesSearch =
+      battery.serialNumber.includes(searchQuery) ||
+      battery.model.includes(searchQuery) ||
+      battery.location.includes(searchQuery);
     const matchesStatus = statusFilter === 'all' || battery.status === statusFilter;
     const matchesModel = modelFilter === 'all' || battery.model === modelFilter;
     return matchesSearch && matchesStatus && matchesModel;
   });
 
   const modelStats = useMemo(() => {
-    return models.map(model => {
-      const modelBatteries = batteries.filter(b => b.model === model);
+    return models.map((model) => {
+      const modelBatteries = batteries.filter((b) => b.model === model);
       return {
         model,
         total: modelBatteries.length,
-        available: modelBatteries.filter(b => b.status === 'available').length,
-        avgHealth: Math.round(modelBatteries.reduce((sum, b) => sum + b.healthStatus, 0) / modelBatteries.length)
+        available: modelBatteries.filter((b) => b.status === 'available').length,
+        avgHealth:
+          modelBatteries.length > 0
+            ? Math.round(modelBatteries.reduce((sum, b) => sum + b.healthStatus, 0) / modelBatteries.length)
+            : 0,
       };
     });
-  }, [models]);
+  }, [models, batteries]);
 
-  const lowHealthBatteries = batteries.filter(b => b.healthStatus < 85);
+  const lowHealthBatteries = batteries.filter((b) => b.healthStatus < 85);
+
+  const handleInventory = () => {
+    updateInventoryTime();
+    setInventoryMessage('盘点完成，库存已更新');
+    setTimeout(() => setInventoryMessage(''), 3000);
+  };
+
+  const handleAddBattery = () => {
+    if (!newBattery.serialNumber) {
+      alert('请输入电池编号');
+      return;
+    }
+    addBattery({
+      serialNumber: newBattery.serialNumber,
+      model: newBattery.model,
+      capacity: newBattery.capacity,
+      currentLevel: newBattery.currentLevel,
+      healthStatus: newBattery.healthStatus,
+      status: 'available',
+      siteId: newBattery.siteId,
+      location: newBattery.location,
+    });
+    setShowAddModal(false);
+    setNewBattery({
+      serialNumber: '',
+      model: 'TB-48S',
+      capacity: 4500,
+      currentLevel: 100,
+      healthStatus: 100,
+      siteId: 'site-1',
+      location: '中关村智能补能站-A柜',
+    });
+  };
+
+  const handleSwap = (battery: BatteryType) => {
+    setSelectedBattery(battery);
+    setSwapCode('');
+    setShowSwapModal(true);
+  };
+
+  const handleConfirmSwap = () => {
+    if (!swapCode) {
+      alert('请输入换电编号');
+      return;
+    }
+    if (selectedBattery) {
+      updateBatteryStatus(selectedBattery.id, 'in-use', swapCode);
+    }
+    setShowSwapModal(false);
+    setSelectedBattery(null);
+    setSwapCode('');
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">电池库存</h1>
-          <p className="text-slate-500 mt-1">管理电池库存，追踪电池状态</p>
+          <p className="text-slate-500 mt-1">
+            管理电池库存，追踪电池状态
+            {lastInventoryTime && (
+              <span className="ml-4 text-xs text-slate-400">上次盘点：{lastInventoryTime}</span>
+            )}
+          </p>
         </div>
         <div className="flex gap-3">
-          <button className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium text-sm hover:bg-slate-200 transition-colors flex items-center gap-2">
+          {inventoryMessage && (
+            <span className="px-3 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium flex items-center gap-1">
+              <Save className="w-4 h-4" />
+              {inventoryMessage}
+            </span>
+          )}
+          <button
+            onClick={handleInventory}
+            className="px-4 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium text-sm hover:bg-slate-200 transition-colors flex items-center gap-2"
+          >
             <RefreshCw className="w-4 h-4" />
             盘点
           </button>
-          <button className="px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium text-sm hover:shadow-lg transition-all flex items-center gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-4 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium text-sm hover:shadow-lg transition-all flex items-center gap-2"
+          >
             <Plus className="w-4 h-4" />
             入库
           </button>
@@ -147,8 +244,10 @@ export default function BatteryInventory() {
                 className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">全部型号</option>
-                {models.map(m => (
-                  <option key={m} value={m}>{m}</option>
+                {models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
                 ))}
               </select>
               <select
@@ -170,15 +269,33 @@ export default function BatteryInventory() {
             <table className="w-full">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">电池编号</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">型号</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">容量</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">电量</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">健康度</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">状态</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">位置</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">循环次数</th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">操作</th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">
+                    电池编号
+                  </th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">
+                    型号
+                  </th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">
+                    容量
+                  </th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">
+                    电量
+                  </th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">
+                    健康度
+                  </th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">
+                    状态
+                  </th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">
+                    位置
+                  </th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">
+                    循环次数
+                  </th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">
+                    操作
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -196,8 +313,11 @@ export default function BatteryInventory() {
                         <div className="w-20 h-2 bg-slate-200 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full ${
-                              battery.currentLevel >= 80 ? 'bg-green-500' :
-                              battery.currentLevel >= 30 ? 'bg-yellow-500' : 'bg-red-500'
+                              battery.currentLevel >= 80
+                                ? 'bg-green-500'
+                                : battery.currentLevel >= 30
+                                ? 'bg-yellow-500'
+                                : 'bg-red-500'
                             }`}
                             style={{ width: `${battery.currentLevel}%` }}
                           />
@@ -206,15 +326,24 @@ export default function BatteryInventory() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`text-sm font-medium ${
-                        battery.healthStatus >= 90 ? 'text-green-600' :
-                        battery.healthStatus >= 75 ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
+                      <span
+                        className={`text-sm font-medium ${
+                          battery.healthStatus >= 90
+                            ? 'text-green-600'
+                            : battery.healthStatus >= 75
+                            ? 'text-yellow-600'
+                            : 'text-red-600'
+                        }`}
+                      >
                         {battery.healthStatus}%
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(battery.status)}`}>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                          battery.status
+                        )}`}
+                      >
                         {getStatusText(battery.status)}
                       </span>
                     </td>
@@ -224,7 +353,12 @@ export default function BatteryInventory() {
                       <div className="flex items-center gap-2">
                         <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">详情</button>
                         {battery.status === 'available' && (
-                          <button className="text-green-600 hover:text-green-700 text-sm font-medium">换电</button>
+                          <button
+                            onClick={() => handleSwap(battery)}
+                            className="text-green-600 hover:text-green-700 text-sm font-medium"
+                          >
+                            换电
+                          </button>
                         )}
                       </div>
                     </td>
@@ -243,12 +377,14 @@ export default function BatteryInventory() {
                 <div key={stat.model} className="p-3 bg-slate-50 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-medium text-slate-800">{stat.model}</span>
-                    <span className="text-sm text-slate-500">{stat.available}/{stat.total} 可用</span>
+                    <span className="text-sm text-slate-500">
+                      {stat.available}/{stat.total} 可用
+                    </span>
                   </div>
                   <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-green-500 rounded-full"
-                      style={{ width: `${(stat.available / stat.total) * 100}%` }}
+                      style={{ width: `${stat.total > 0 ? (stat.available / stat.total) * 100 : 0}%` }}
                     />
                   </div>
                   <p className="text-xs text-slate-500 mt-1.5">平均健康度: {stat.avgHealth}%</p>
@@ -274,10 +410,182 @@ export default function BatteryInventory() {
                   </div>
                 </div>
               ))}
+              {lowHealthBatteries.length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-4">暂无需要关注的电池</p>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">电池入库</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">电池编号</label>
+                <input
+                  type="text"
+                  placeholder="例如：BAT-2026-0016"
+                  value={newBattery.serialNumber}
+                  onChange={(e) => setNewBattery((prev) => ({ ...prev, serialNumber: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">型号</label>
+                  <select
+                    value={newBattery.model}
+                    onChange={(e) => setNewBattery((prev) => ({ ...prev, model: e.target.value }))}
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="TB-48S">TB-48S</option>
+                    <option value="TB-48">TB-48</option>
+                    <option value="TB-50">TB-50</option>
+                    <option value="TB-55">TB-55</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">容量 (mAh)</label>
+                  <input
+                    type="number"
+                    value={newBattery.capacity}
+                    onChange={(e) =>
+                      setNewBattery((prev) => ({ ...prev, capacity: parseInt(e.target.value) || 0 }))
+                    }
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">当前电量 (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={newBattery.currentLevel}
+                    onChange={(e) =>
+                      setNewBattery((prev) => ({ ...prev, currentLevel: parseInt(e.target.value) || 0 }))
+                    }
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">健康度 (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={newBattery.healthStatus}
+                    onChange={(e) =>
+                      setNewBattery((prev) => ({ ...prev, healthStatus: parseInt(e.target.value) || 0 }))
+                    }
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">存放位置</label>
+                <input
+                  type="text"
+                  value={newBattery.location}
+                  onChange={(e) => setNewBattery((prev) => ({ ...prev, location: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAddBattery}
+                className="flex-1 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:shadow-lg transition-all"
+              >
+                确认入库
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSwapModal && selectedBattery && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">电池换电</h3>
+              <button
+                onClick={() => {
+                  setShowSwapModal(false);
+                  setSelectedBattery(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-4 bg-slate-50 rounded-xl">
+                <p className="text-sm text-slate-500 mb-1">选中电池</p>
+                <p className="font-mono font-semibold text-slate-800">{selectedBattery.serialNumber}</p>
+                <p className="text-sm text-slate-600 mt-1">
+                  {selectedBattery.model} | {formatCapacity(selectedBattery.capacity)}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">换电编号</label>
+                <input
+                  type="text"
+                  placeholder="请输入或扫描换电编号"
+                  value={swapCode}
+                  onChange={(e) => setSwapCode(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-slate-400 mt-2">换电编号用于追踪电池流转，例如：SW-20260607-001</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowSwapModal(false);
+                  setSelectedBattery(null);
+                }}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmSwap}
+                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:shadow-lg transition-all"
+              >
+                确认绑定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

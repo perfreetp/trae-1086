@@ -1,13 +1,18 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Cpu, Zap, BatteryCharging, AlertTriangle, CheckCircle, XCircle, Clock, Wrench, Search } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { devices } from '@/data/devices';
+import { useAppStore } from '@/store';
 import { getStatusText, getStatusColor } from '@/utils/format';
+import type { Device } from '@/types';
 
 export default function DeviceStatus() {
+  const navigate = useNavigate();
+  const { devices, addTicket, updateDeviceStatus } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [repairMessage, setRepairMessage] = useState('');
 
   const stats = useMemo(() => {
     const total = devices.length;
@@ -16,7 +21,27 @@ export default function DeviceStatus() {
     const fault = devices.filter(d => d.status === 'fault').length;
     const offline = devices.filter(d => d.status === 'offline').length;
     return { total, online, inUse, fault, offline };
-  }, []);
+  }, [devices]);
+
+  const handleRepair = (device: Device) => {
+    addTicket({
+      siteId: device.siteId,
+      siteName: device.siteName,
+      deviceId: device.id,
+      deviceName: device.name,
+      type: 'device-fault',
+      priority: 'high',
+      title: `${device.name} 故障报修`,
+      description: `设备型号：${device.model}，请尽快安排维修人员处理`,
+      reporter: '系统自动',
+    });
+    updateDeviceStatus(device.id, 'fault');
+    setRepairMessage(`已为 ${device.name} 创建报修工单`);
+    setTimeout(() => {
+      setRepairMessage('');
+      navigate('/tickets');
+    }, 1500);
+  };
 
   const pieData = useMemo(() => [
     { name: '在线', value: stats.online, color: '#10B981' },
@@ -43,6 +68,12 @@ export default function DeviceStatus() {
           <h1 className="text-2xl font-bold text-slate-800">设备状态</h1>
           <p className="text-slate-500 mt-1">实时监控所有站点设备运行状态</p>
         </div>
+        {repairMessage && (
+          <div className="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium flex items-center gap-2">
+            <CheckCircle className="w-4 h-4" />
+            {repairMessage}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-5 gap-4">
@@ -146,7 +177,10 @@ export default function DeviceStatus() {
                       {device.siteName} · {device.model}
                     </p>
                   </div>
-                  <button className="px-3 py-1.5 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition-colors flex items-center gap-1">
+                  <button 
+                    onClick={() => handleRepair(device)}
+                    className="px-3 py-1.5 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition-colors flex items-center gap-1"
+                  >
                     <Wrench className="w-4 h-4" />
                     报修
                   </button>
@@ -256,7 +290,10 @@ export default function DeviceStatus() {
                     <div className="flex items-center gap-2">
                       <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">详情</button>
                       {device.status === 'fault' && (
-                        <button className="text-red-600 hover:text-red-700 text-sm font-medium">报修</button>
+                        <button 
+                          onClick={() => handleRepair(device)}
+                          className="text-red-600 hover:text-red-700 text-sm font-medium"
+                        >报修</button>
                       )}
                     </div>
                   </td>

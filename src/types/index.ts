@@ -70,6 +70,8 @@ export interface ChargingRecord {
   batteryAfter?: number;
   amount: number;
   status: 'charging' | 'completed' | 'failed';
+  invoiceStatus?: 'none' | 'applied' | 'issued';
+  settled?: boolean;
 }
 
 export interface Member {
