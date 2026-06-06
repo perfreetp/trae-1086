@@ -1,0 +1,90 @@
+import type { Ticket } from '@/types';
+
+export const tickets: Ticket[] = [
+  {
+    id: 'T001',
+    siteId: '2',
+    siteName: '望京科创园站',
+    deviceId: 'D005',
+    deviceName: '充电桩 #01',
+    type: 'device-fault',
+    priority: 'high',
+    status: 'processing',
+    title: '充电桩无法启动充电',
+    description: '用户反馈插入电池后充电桩无响应，屏幕显示正常但无法开始充电流程。已尝试重启设备，问题仍然存在。',
+    reporter: '李飞宇',
+    assignee: '张工程师',
+    createdAt: '2026-06-07 09:30:00'
+  },
+  {
+    id: 'T002',
+    siteId: '8',
+    siteName: '丰台科技园站',
+    type: 'timeout-occupancy',
+    priority: 'medium',
+    status: 'open',
+    title: '充电完成后车辆超时占位',
+    description: '用户充电完成后已超过30分钟未离开，占用充电桩位置，影响后续用户使用。已发送提醒短信。',
+    reporter: '系统自动',
+    createdAt: '2026-06-07 10:15:00'
+  },
+  {
+    id: 'T003',
+    siteId: '1',
+    siteName: '中关村智能补能站',
+    deviceId: 'D004',
+    deviceName: '换电柜 #01',
+    type: 'battery-issue',
+    priority: 'urgent',
+    status: 'open',
+    title: '换电柜电池温度异常',
+    description: '换电柜A-05仓电池温度检测异常，超过45度安全阈值。系统已自动隔离该仓位，请尽快安排技术人员检查。',
+    reporter: '系统自动',
+    createdAt: '2026-06-07 10:00:00'
+  },
+  {
+    id: 'T004',
+    siteId: '3',
+    siteName: '亦庄经济开发区站',
+    deviceId: 'D011',
+    deviceName: '充电桩 #04',
+    type: 'device-fault',
+    priority: 'low',
+    status: 'resolved',
+    title: '充电桩屏幕显示模糊',
+    description: '充电桩显示屏在阳光直射下显示不清晰，用户反映难以操作。建议更换高亮度屏幕或加装遮阳罩。',
+    reporter: '王浩然',
+    assignee: '李工程师',
+    createdAt: '2026-06-06 14:30:00',
+    resolvedAt: '2026-06-06 17:00:00'
+  },
+  {
+    id: 'T005',
+    siteId: '7',
+    siteName: '昌平未来科学城站',
+    type: 'other',
+    priority: 'medium',
+    status: 'closed',
+    title: '站点卫生清洁请求',
+    description: '站点周围有较多垃圾，建议安排清洁人员定期清理。用户反馈影响使用体验。',
+    reporter: '吴俊杰',
+    assignee: '站点管理员',
+    createdAt: '2026-06-05 11:20:00',
+    resolvedAt: '2026-06-05 15:30:00'
+  },
+  {
+    id: 'T006',
+    siteId: '6',
+    siteName: '通州副中心站',
+    deviceId: 'D015',
+    deviceName: '换电柜 #01',
+    type: 'device-fault',
+    priority: 'high',
+    status: 'processing',
+    title: '换电柜柜门无法正常打开',
+    description: '用户扫码后换电柜柜门无反应，多次尝试无效。已联系技术人员远程排查，疑似电控锁故障。',
+    reporter: '孙雅琪',
+    assignee: '王工程师',
+    createdAt: '2026-06-07 08:45:00'
+  }
+];
