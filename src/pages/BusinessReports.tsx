@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
-import { BarChart3, TrendingUp, Users, Zap, BatteryCharging, DollarSign, Star, Download, Calendar, ChevronDown, MessageSquare, ThumbsUp } from 'lucide-react';
+import { BarChart3, TrendingUp, Users, Zap, BatteryCharging, DollarSign, Star, Download, Calendar, ChevronDown, MessageSquare, ThumbsUp, FileText, Receipt } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell, Legend } from 'recharts';
 import { reviews } from '@/data/reports';
 import { formatCurrency, formatDate } from '@/utils/format';
+import { useAppStore } from '@/store';
 
 const dataByRange = {
   day: {
@@ -74,9 +75,20 @@ const dataByRange = {
 };
 
 export default function BusinessReports() {
-  const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month'>('week');
+  const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month' | 'custom'>('week');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const { records } = useAppStore();
 
-  const currentData = useMemo(() => dataByRange[timeRange], [timeRange]);
+  const currentData = useMemo(() => dataByRange[timeRange === 'custom' ? 'week' : timeRange], [timeRange]);
+
+  const financeStats = useMemo(() => {
+    const unsettledAmount = records.filter(r => !r.settled && r.status === 'completed')
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+    const pendingInvoiceAmount = records.filter(r => r.settled && r.invoiceStatus === 'none')
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+    return { unsettledAmount, pendingInvoiceAmount };
+  }, [records]);
 
   const summaryStats = useMemo(() => {
     const data = currentData.report;
@@ -102,19 +114,37 @@ export default function BusinessReports() {
           <h1 className="text-2xl font-bold text-slate-800">经营报表</h1>
           <p className="text-slate-500 mt-1">查看平台运营数据和统计分析</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           <div className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg">
             <Calendar className="w-4 h-4 text-slate-400" />
             <select
               value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value as 'day' | 'week' | 'month')}
+              onChange={(e) => setTimeRange(e.target.value as 'day' | 'week' | 'month' | 'custom')}
               className="text-sm text-slate-700 focus:outline-none bg-transparent"
             >
               <option value="day">今日</option>
               <option value="week">本周</option>
               <option value="month">本月</option>
+              <option value="custom">自定义</option>
             </select>
           </div>
+          {timeRange === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span className="text-slate-400">至</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
           <button className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium text-sm hover:bg-slate-200 transition-colors flex items-center gap-2">
             <Download className="w-4 h-4" />
             导出报表
@@ -186,6 +216,31 @@ export default function BusinessReports() {
           </div>
           <p className="text-2xl font-bold">{averageRating}</p>
           <p className="text-xs text-pink-100 mt-1">用户评分</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center">
+              <FileText className="w-6 h-6 text-orange-600" />
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">未结算金额</p>
+              <p className="text-2xl font-bold text-slate-800">{formatCurrency(financeStats.unsettledAmount)}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
+              <Receipt className="w-6 h-6 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">待开发票金额</p>
+              <p className="text-2xl font-bold text-slate-800">{formatCurrency(financeStats.pendingInvoiceAmount)}</p>
+            </div>
+          </div>
         </div>
       </div>
 

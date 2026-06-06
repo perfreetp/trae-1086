@@ -1,13 +1,22 @@
 import { useState, useMemo } from 'react';
-import { AlertTriangle, Clock, User, MapPin, Wrench, Search, Plus, Filter, ChevronRight, XCircle, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { AlertTriangle, Clock, User, MapPin, Wrench, Search, Plus, Filter, ChevronRight, XCircle, CheckCircle, AlertCircle, X, MessageSquare } from 'lucide-react';
 import { useAppStore } from '@/store';
 import { sites } from '@/data/sites';
 import { devices } from '@/data/devices';
 import { getStatusText, getStatusColor, getPriorityText, getPriorityColor, getTicketTypeText, formatDateTime } from '@/utils/format';
 import type { Ticket } from '@/types';
 
+const PROCESSORS = ['张工', '李工', '王工', '赵工', '刘工'];
+
 export default function ExceptionTickets() {
-  const { tickets, addTicket, updateTicketStatus } = useAppStore();
+  const { tickets, addTicket, updateTicketStatus, assignTicket, addProcessNote, resolveTicket } = useAppStore();
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [selectedProcessor, setSelectedProcessor] = useState('');
+  const [processNote, setProcessNote] = useState('');
+  const [resolution, setResolution] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -54,12 +63,46 @@ export default function ExceptionTickets() {
     };
   }, [filteredTickets]);
 
-  const handleProcess = (ticket: Ticket) => {
-    updateTicketStatus(ticket.id, 'processing');
+  const handleAssign = (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    setSelectedProcessor('');
+    setShowAssignModal(true);
+  };
+
+  const handleConfirmAssign = () => {
+    if (!selectedProcessor || !selectedTicket) return;
+    assignTicket(selectedTicket.id, selectedProcessor);
+    updateTicketStatus(selectedTicket.id, 'processing');
+    setShowAssignModal(false);
+    setSelectedTicket(null);
+  };
+
+  const handleAddNote = (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    setProcessNote('');
+    setShowNoteModal(true);
+  };
+
+  const handleConfirmNote = () => {
+    if (!processNote || !selectedTicket) return;
+    addProcessNote(selectedTicket.id, processNote);
+    setShowNoteModal(false);
+    setSelectedTicket(null);
+    setProcessNote('');
   };
 
   const handleResolve = (ticket: Ticket) => {
-    updateTicketStatus(ticket.id, 'resolved');
+    setSelectedTicket(ticket);
+    setResolution('');
+    setShowResolveModal(true);
+  };
+
+  const handleConfirmResolve = () => {
+    if (!resolution || !selectedTicket) return;
+    resolveTicket(selectedTicket.id, resolution);
+    setShowResolveModal(false);
+    setSelectedTicket(null);
+    setResolution('');
   };
 
   const handleSubmitTicket = () => {
@@ -249,10 +292,10 @@ export default function ExceptionTickets() {
                 <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between">
                   <span className="text-xs text-slate-500">类型: {getTicketTypeText(ticket.type)}</span>
                   <button
-                    onClick={() => handleProcess(ticket)}
+                    onClick={() => handleAssign(ticket)}
                     className="text-xs text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1"
                   >
-                    处理
+                    派工
                     <ChevronRight className="w-3 h-3" />
                   </button>
                 </div>
@@ -314,8 +357,22 @@ export default function ExceptionTickets() {
                     </span>
                   </div>
                 )}
-                <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between">
-                  <span className="text-xs text-slate-500">类型: {getTicketTypeText(ticket.type)}</span>
+                {ticket.lastProcessedAt && (
+                  <div className="text-xs text-slate-500 mt-1">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      最近处理: {formatDateTime(ticket.lastProcessedAt)}
+                    </span>
+                  </div>
+                )}
+                <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => handleAddNote(ticket)}
+                    className="text-xs text-slate-600 font-medium hover:text-slate-800 flex items-center gap-1"
+                  >
+                    <MessageSquare className="w-3 h-3" />
+                    追加备注
+                  </button>
                   <button
                     onClick={() => handleResolve(ticket)}
                     className="text-xs text-green-600 font-medium hover:text-green-700 flex items-center gap-1"
@@ -529,6 +586,131 @@ export default function ExceptionTickets() {
                 className="flex-1 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:shadow-lg transition-all"
               >
                 提交工单
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAssignModal && selectedTicket && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">分配处理人</h3>
+              <button onClick={() => setShowAssignModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-6">
+              <div className="p-4 bg-blue-50 rounded-xl mb-4">
+                <p className="text-sm text-slate-500 mb-1">工单标题</p>
+                <p className="font-medium text-slate-800">{selectedTicket.title}</p>
+              </div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">选择处理人</label>
+              <select
+                value={selectedProcessor}
+                onChange={(e) => setSelectedProcessor(e.target.value)}
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">请选择处理人</option>
+                {PROCESSORS.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowAssignModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmAssign}
+                disabled={!selectedProcessor}
+                className="flex-1 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50"
+              >
+                确认派工
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNoteModal && selectedTicket && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">追加处理备注</h3>
+              <button onClick={() => setShowNoteModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-slate-700 mb-2">备注内容</label>
+              <textarea
+                rows={4}
+                value={processNote}
+                onChange={(e) => setProcessNote(e.target.value)}
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                placeholder="请输入处理进展或备注..."
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowNoteModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmNote}
+                disabled={!processNote}
+                className="flex-1 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50"
+              >
+                确认提交
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showResolveModal && selectedTicket && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">工单解决</h3>
+              <button onClick={() => setShowResolveModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-6">
+              <div className="p-4 bg-green-50 rounded-xl mb-4">
+                <p className="text-sm text-slate-500 mb-1">工单标题</p>
+                <p className="font-medium text-slate-800">{selectedTicket.title}</p>
+              </div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">解决说明</label>
+              <textarea
+                rows={4}
+                value={resolution}
+                onChange={(e) => setResolution(e.target.value)}
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                placeholder="请描述问题的解决方案..."
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowResolveModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmResolve}
+                disabled={!resolution}
+                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:shadow-lg transition-all disabled:opacity-50"
+              >
+                确认完成
               </button>
             </div>
           </div>

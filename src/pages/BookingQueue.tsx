@@ -1,24 +1,17 @@
-import { useState, useEffect } from 'react';
-import { CalendarClock, User, MapPin, Clock, QrCode, X, Check, ChevronRight, Plus, Search } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { CalendarClock, User, MapPin, Clock, QrCode, X, Check, ChevronRight, Plus, Search, Filter, Calendar, UserX } from 'lucide-react';
 import { useAppStore } from '@/store';
 import { sites } from '@/data/sites';
 import { getStatusText, getStatusColor, getServiceTypeText, formatDateTime } from '@/utils/format';
 import type { Booking } from '@/types';
 
 const timeSlots = [
-  { time: '08:00', available: true },
-  { time: '08:30', available: true },
-  { time: '09:00', available: false },
-  { time: '09:30', available: true },
-  { time: '10:00', available: false },
-  { time: '10:30', available: true },
-  { time: '11:00', available: true },
-  { time: '11:30', available: false },
-  { time: '14:00', available: true },
-  { time: '14:30', available: true },
-  { time: '15:00', available: true },
-  { time: '15:30', available: false },
+  '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
+  '11:00', '11:30', '14:00', '14:30', '15:00', '15:30',
+  '16:00', '16:30', '17:00', '17:30', '18:00', '18:30',
 ];
+
+const MAX_BOOKINGS_PER_SLOT = 3;
 
 export default function BookingQueue() {
   const {
@@ -33,6 +26,9 @@ export default function BookingQueue() {
   const [activeTab, setActiveTab] = useState<string>('queue');
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [siteFilter, setSiteFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('2026-06-07');
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<string>('all');
 
   const [formData, setFormData] = useState({
     siteId: '',
@@ -42,6 +38,21 @@ export default function BookingQueue() {
     userName: '',
     phone: '',
   });
+
+  const slotAvailability = useMemo(() => {
+    if (!formData.siteId) return {};
+    const siteBookings = bookings.filter(
+      b => b.siteId === formData.siteId && 
+           b.timeSlot.startsWith(dateFilter) &&
+           b.status !== 'cancelled' &&
+           b.status !== 'no-show'
+    );
+    const counts: Record<string, number> = {};
+    timeSlots.forEach(slot => {
+      counts[slot] = siteBookings.filter(b => b.timeSlot.includes(slot)).length;
+    });
+    return counts;
+  }, [bookings, formData.siteId, dateFilter]);
 
   useEffect(() => {
     if (preselectedBookingSite) {
@@ -61,11 +72,23 @@ export default function BookingQueue() {
     ['completed', 'cancelled', 'no-show'].includes(b.status)
   );
 
-  const filteredPending = pendingBookings.filter(
-    (b) =>
-      b.userName.includes(searchQuery) ||
-      b.siteName.includes(searchQuery)
-  );
+  const applyFilters = (list: Booking[]) => {
+    return list.filter((b) => {
+      const matchesSearch = b.userName.includes(searchQuery) || b.siteName.includes(searchQuery);
+      const matchesSite = siteFilter === 'all' || b.siteId === siteFilter;
+      const matchesDate = dateFilter === 'all' || b.timeSlot.startsWith(dateFilter);
+      const matchesService = serviceTypeFilter === 'all' || b.serviceType === serviceTypeFilter;
+      return matchesSearch && matchesSite && matchesDate && matchesService;
+    });
+  };
+
+  const filteredPending = applyFilters(pendingBookings);
+  const filteredInProgress = applyFilters(inProgressBookings);
+  const filteredCompleted = applyFilters(completedBookings);
+
+  const handleNoShow = (booking: Booking) => {
+    updateBookingStatus(booking.id, 'no-show');
+  };
 
   const handleConfirm = (booking: Booking) => {
     updateBookingStatus(booking.id, 'confirmed');
@@ -199,6 +222,53 @@ export default function BookingQueue() {
         </div>
       </div>
 
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-slate-400" />
+            <span className="text-sm text-slate-600 font-medium">筛选:</span>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="搜索用户/站点"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+            />
+          </div>
+          <select
+            value={siteFilter}
+            onChange={(e) => setSiteFilter(e.target.value)}
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">全部站点</option>
+            {sites.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-slate-400" />
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <select
+            value={serviceTypeFilter}
+            onChange={(e) => setServiceTypeFilter(e.target.value)}
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">全部服务</option>
+            <option value="charging">充电</option>
+            <option value="battery-swap">换电</option>
+          </select>
+        </div>
+      </div>
+
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="border-b border-slate-200 px-4 py-3">
@@ -248,8 +318,8 @@ export default function BookingQueue() {
             {(activeTab === 'queue'
               ? filteredPending
               : activeTab === 'progress'
-              ? inProgressBookings
-              : completedBookings
+              ? filteredInProgress
+              : filteredCompleted
             ).map((booking, index) => (
               <div
                 key={booking.id}
@@ -329,13 +399,23 @@ export default function BookingQueue() {
                       </div>
                     )}
                     {booking.status === 'confirmed' && (
-                      <button
-                        onClick={() => handleVerify(booking)}
-                        className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1"
-                      >
-                        <QrCode className="w-4 h-4" />
-                        核销
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleVerify(booking)}
+                          className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1"
+                        >
+                          <QrCode className="w-4 h-4" />
+                          核销
+                        </button>
+                        <button
+                          onClick={() => handleNoShow(booking)}
+                          className="px-3 py-1.5 bg-orange-100 text-orange-600 text-sm rounded-lg hover:bg-orange-200 transition-colors flex items-center gap-1"
+                          title="标记未到店"
+                        >
+                          <UserX className="w-4 h-4" />
+                          未到
+                        </button>
+                      </div>
                     )}
                     {booking.status === 'in-progress' && (
                       <button
@@ -349,7 +429,7 @@ export default function BookingQueue() {
                 </div>
               </div>
             ))}
-            {(activeTab === 'queue' ? filteredPending : activeTab === 'progress' ? inProgressBookings : completedBookings).length === 0 && (
+            {(activeTab === 'queue' ? filteredPending : activeTab === 'progress' ? filteredInProgress : filteredCompleted).length === 0 && (
               <div className="text-center py-12 text-slate-400">
                 <CalendarClock className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p>暂无数据</p>
@@ -363,20 +443,23 @@ export default function BookingQueue() {
           <p className="text-sm text-slate-500 mb-4">2026年6月7日 星期日</p>
 
           <div className="grid grid-cols-3 gap-2">
-            {timeSlots.map((slot) => (
-              <button
-                key={slot.time}
-                disabled={!slot.available}
-                className={`py-2.5 px-2 rounded-lg text-sm font-medium transition-all ${
-                  slot.available
-                    ? 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
-                    : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                }`}
-              >
-                {slot.time}
-                <span className="block text-xs mt-0.5">{slot.available ? '可预约' : '已满'}</span>
-              </button>
-            ))}
+            {timeSlots.map((slot) => {
+              const available = (slotAvailability[slot] || 0) < MAX_BOOKINGS_PER_SLOT;
+              return (
+                <button
+                  key={slot}
+                  disabled={!available}
+                  className={`py-2.5 px-2 rounded-lg text-sm font-medium transition-all ${
+                    available
+                      ? 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
+                      : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                  }`}
+                >
+                  {slot}
+                  <span className="block text-xs mt-0.5">{available ? '可预约' : '已满'}</span>
+                </button>
+              );
+            })}
           </div>
 
           <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
@@ -455,24 +538,41 @@ export default function BookingQueue() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">选择时段</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  选择时段
+                  {formData.siteId && (
+                    <span className="text-xs text-slate-400 ml-2">（每时段限 {MAX_BOOKINGS_PER_SLOT} 个预约）</span>
+                  )}
+                </label>
                 <div className="grid grid-cols-4 gap-2">
-                  {timeSlots
-                    .filter((s) => s.available)
-                    .slice(0, 8)
-                    .map((slot) => (
+                  {timeSlots.slice(0, 8).map((slot) => {
+                    const booked = slotAvailability[slot] || 0;
+                    const isFull = booked >= MAX_BOOKINGS_PER_SLOT;
+                    const remaining = MAX_BOOKINGS_PER_SLOT - booked;
+                    return (
                       <button
-                        key={slot.time}
-                        onClick={() => setFormData((prev) => ({ ...prev, timeSlot: slot.time }))}
-                        className={`py-2 px-2 rounded-lg text-sm border-2 transition-all ${
-                          formData.timeSlot === slot.time
+                        key={slot}
+                        onClick={() => !isFull && setFormData((prev) => ({ ...prev, timeSlot: slot }))}
+                        disabled={isFull || !formData.siteId}
+                        className={`py-2 px-2 rounded-lg text-xs border-2 transition-all relative ${
+                          formData.timeSlot === slot
                             ? 'bg-blue-500 text-white border-blue-500'
+                            : isFull || !formData.siteId
+                            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
                             : 'bg-slate-50 border-slate-200 hover:bg-blue-50 hover:border-blue-300'
                         }`}
                       >
-                        {slot.time}
+                        <div>{slot}</div>
+                        {formData.siteId && (
+                          <div className={`text-xs mt-0.5 ${
+                            formData.timeSlot === slot ? 'text-blue-100' : isFull ? 'text-red-400' : 'text-slate-400'
+                          }`}>
+                            {isFull ? '已满' : `剩${remaining}`}
+                          </div>
+                        )}
                       </button>
-                    ))}
+                    );
+                  })}
                 </div>
               </div>
 

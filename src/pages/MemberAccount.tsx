@@ -8,13 +8,25 @@ export default function MemberAccount() {
   const { members, transactions, rechargeMember, refundDeposit, updateMemberLevel } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [levelFilter, setLevelFilter] = useState<string>('all');
-  const [selectedMember, setSelectedMember] = useState<Member | null>(members[0] || null);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(members[0]?.id || null);
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [showLevelModal, setShowLevelModal] = useState(false);
   const [rechargeAmount, setRechargeAmount] = useState(100);
   const [refundAmount, setRefundAmount] = useState(500);
   const [newLevel, setNewLevel] = useState<Member['level']>('normal');
+
+  const selectedMember = useMemo(() => 
+    members.find(m => m.id === selectedMemberId) || null, 
+    [members, selectedMemberId]
+  );
+
+  const filteredTransactions = useMemo(() => 
+    selectedMemberId 
+      ? transactions.filter(t => t.memberId === selectedMemberId)
+      : transactions,
+    [transactions, selectedMemberId]
+  );
 
   const stats = useMemo(() => {
     const total = members.length;
@@ -168,7 +180,7 @@ export default function MemberAccount() {
             {filteredMembers.map((member) => (
               <div
                 key={member.id}
-                onClick={() => setSelectedMember(member)}
+                onClick={() => setSelectedMemberId(member.id)}
                 className={`p-4 cursor-pointer transition-all ${
                   selectedMember?.id === member.id
                     ? 'bg-blue-50 border-l-4 border-blue-500'
@@ -301,7 +313,7 @@ export default function MemberAccount() {
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
             <h3 className="text-lg font-semibold text-slate-800 mb-4">最近交易</h3>
             <div className="space-y-3 max-h-[300px] overflow-y-auto">
-              {transactions.map((tx) => (
+              {filteredTransactions.map((tx) => (
                 <div key={tx.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${

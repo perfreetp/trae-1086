@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
-import { Battery, BatteryCharging, Activity, RefreshCw, Search, Filter, Plus, BarChart3, AlertTriangle, X, Save } from 'lucide-react';
+import { Battery, BatteryCharging, Activity, RefreshCw, Search, Filter, Plus, BarChart3, AlertTriangle, X, Save, History, Clock, User } from 'lucide-react';
 import { useAppStore } from '@/store';
 import { getStatusText, getStatusColor, formatCapacity, formatPercent, formatDateTime } from '@/utils/format';
-import type { Battery as BatteryType } from '@/types';
+import type { Battery as BatteryType, BatteryLog } from '@/types';
 
 export default function BatteryInventory() {
   const {
@@ -11,7 +11,20 @@ export default function BatteryInventory() {
     addBattery,
     updateBatteryStatus,
     updateInventoryTime,
+    batteryLogs,
   } = useAppStore();
+  const [showLogDrawer, setShowLogDrawer] = useState(false);
+  const [selectedBatteryForLog, setSelectedBatteryForLog] = useState<BatteryType | null>(null);
+
+  const batteryLogsForSelected = useMemo(() => 
+    selectedBatteryForLog ? batteryLogs.filter(l => l.batteryId === selectedBatteryForLog.id) : [],
+    [batteryLogs, selectedBatteryForLog]
+  );
+
+  const handleViewLogs = (battery: BatteryType) => {
+    setSelectedBatteryForLog(battery);
+    setShowLogDrawer(true);
+  };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -351,7 +364,13 @@ export default function BatteryInventory() {
                     <td className="px-6 py-4 text-sm text-slate-600">{battery.cycleCount} 次</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">详情</button>
+                        <button 
+                          onClick={() => handleViewLogs(battery)}
+                          className="text-slate-600 hover:text-slate-800 text-sm font-medium flex items-center gap-1"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                          记录
+                        </button>
                         {battery.status === 'available' && (
                           <button
                             onClick={() => handleSwap(battery)}
@@ -582,6 +601,62 @@ export default function BatteryInventory() {
               >
                 确认绑定
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLogDrawer && selectedBatteryForLog && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex justify-end">
+          <div className="bg-white w-full max-w-md h-full overflow-y-auto">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div>
+                <h3 className="font-bold text-slate-800">电池流转记录</h3>
+                <p className="text-sm text-slate-500">{selectedBatteryForLog.serialNumber}</p>
+              </div>
+              <button onClick={() => setShowLogDrawer(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {batteryLogsForSelected.length > 0 ? (
+                batteryLogsForSelected.map((log) => (
+                  <div key={log.id} className="flex gap-4">
+                    <div className="relative">
+                      <div className={`w-3 h-3 rounded-full mt-1.5 ${
+                        log.type === 'stock-in' ? 'bg-green-500' :
+                        log.type === 'swap' ? 'bg-blue-500' :
+                        log.type === 'inventory' ? 'bg-yellow-500' :
+                        'bg-slate-400'
+                      }`} />
+                      <div className="absolute top-4 left-1.5 w-px h-full bg-slate-200" />
+                    </div>
+                    <div className="flex-1 pb-4">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-slate-800">{log.description}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-slate-500">
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {log.createdAt}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          {log.operator}
+                        </span>
+                      </div>
+                      {log.relatedId && (
+                        <p className="text-xs text-blue-600 mt-1">关联编号: {log.relatedId}</p>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-12 text-slate-400">
+                  <History className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>暂无流转记录</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -103,6 +103,29 @@ export interface Ticket {
   assignee?: string;
   createdAt: string;
   resolvedAt?: string;
+  lastProcessedAt?: string;
+  processNotes?: string;
+  resolution?: string;
+}
+
+export interface BatteryLog {
+  id: string;
+  batteryId: string;
+  type: 'inventory' | 'stock-in' | 'swap' | 'status-change' | 'maintenance';
+  description: string;
+  operator: string;
+  relatedId?: string;
+  createdAt: string;
+}
+
+export interface Transaction {
+  id: string;
+  memberId: string;
+  memberName: string;
+  type: 'recharge' | 'deposit' | 'refund' | 'consume' | 'adjust';
+  amount: number;
+  description: string;
+  createdAt: string;
 }
 
 export interface ReportData {

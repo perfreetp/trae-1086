@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Booking, Battery, Ticket, Member, ChargingRecord, Device, Site } from '@/types';
+import type { Booking, Battery, Ticket, Member, ChargingRecord, Device, Site, BatteryLog, Transaction } from '@/types';
 import { bookings as initialBookings } from '@/data/bookings';
 import { batteries as initialBatteries } from '@/data/batteries';
 import { tickets as initialTickets } from '@/data/tickets';
@@ -7,14 +7,6 @@ import { members as initialMembers } from '@/data/members';
 import { chargingRecords as initialRecords } from '@/data/records';
 import { devices as initialDevices } from '@/data/devices';
 import { sites as initialSites } from '@/data/sites';
-
-interface Transaction {
-  id: string;
-  type: 'recharge' | 'deposit' | 'refund' | 'consume' | 'adjust';
-  amount: number;
-  description: string;
-  createdAt: string;
-}
 
 interface AppState {
   bookings: Booking[];
@@ -27,19 +19,25 @@ interface AppState {
   selectedSiteId: string | null;
   preselectedBookingSite: Site | null;
   transactions: Transaction[];
+  batteryLogs: BatteryLog[];
   lastInventoryTime: string;
   
   setPreselectedBookingSite: (site: Site | null) => void;
   addBooking: (booking: Omit<Booking, 'id' | 'queueNumber' | 'createdAt' | 'estimatedWaitTime'>) => void;
   updateBookingStatus: (id: string, status: Booking['status']) => void;
   addRecord: (record: Omit<ChargingRecord, 'id'>) => void;
+  completeRecord: (id: string) => void;
   
   addBattery: (battery: Omit<Battery, 'id' | 'cycleCount' | 'lastSwapTime'>) => void;
   updateBatteryStatus: (id: string, status: Battery['status'], swapCode?: string) => void;
   updateInventoryTime: () => void;
+  addBatteryLog: (log: Omit<BatteryLog, 'id' | 'createdAt'>) => void;
   
   addTicket: (ticket: Omit<Ticket, 'id' | 'createdAt' | 'status'>) => void;
   updateTicketStatus: (id: string, status: Ticket['status']) => void;
+  assignTicket: (id: string, assignee: string) => void;
+  addProcessNote: (id: string, note: string) => void;
+  resolveTicket: (id: string, resolution: string) => void;
   
   rechargeMember: (memberId: string, amount: number) => void;
   refundDeposit: (memberId: string, amount: number) => void;
@@ -58,15 +56,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   batteries: initialBatteries,
   tickets: initialTickets,
   members: initialMembers,
-  records: initialRecords,
+  records: initialRecords.map(r => ({ ...r, settled: r.status === 'completed', invoiceStatus: r.invoiceStatus || 'none' })),
   devices: initialDevices,
   sites: initialSites,
   selectedSiteId: null,
   preselectedBookingSite: null,
   transactions: [
-    { id: '1', type: 'recharge', amount: 500, description: '账户充值', createdAt: '2026-06-06 10:30' },
-    { id: '2', type: 'consume', amount: 58.5, description: '充电服务消费', createdAt: '2026-06-06 14:20' },
-    { id: '3', type: 'deposit', amount: 1000, description: '电池押金', createdAt: '2026-06-05 09:15' },
+    { id: '1', memberId: 'U001', memberName: '张晓明', type: 'recharge', amount: 500, description: '账户充值', createdAt: '2026-06-06 10:30' },
+    { id: '2', memberId: 'U001', memberName: '张晓明', type: 'consume', amount: 58.5, description: '充电服务消费', createdAt: '2026-06-06 14:20' },
+    { id: '3', memberId: 'U002', memberName: '李华', type: 'deposit', amount: 1000, description: '电池押金', createdAt: '2026-06-05 09:15' },
+  ],
+  batteryLogs: [
+    { id: '1', batteryId: 'B001', type: 'stock-in', description: '新电池入库', operator: '系统', createdAt: '2026-06-05 08:00' },
+    { id: '2', batteryId: 'B001', type: 'swap', description: '换电绑定 SW-20260606-001', operator: '张晓明', relatedId: 'SW-20260606-001', createdAt: '2026-06-06 10:30' },
   ],
   lastInventoryTime: '2026-06-06 18:00',
 
@@ -97,8 +99,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     const newRecord: ChargingRecord = {
       ...recordData,
       id: generateId(),
+      settled: false,
+      invoiceStatus: 'none',
     };
     set((state) => ({ records: [...state.records, newRecord] }));
+  },
+
+  completeRecord: (id) => {
+    set((state) => ({
+      records: state.records.map((r) =>
+        r.id === id ? { 
+          ...r, 
+          status: 'completed' as const, 
+          endTime: new Date().toLocaleString('zh-CN'),
+          duration: 15,
+          settled: false,
+        } : r
+      ),
+    }));
   },
 
   addBattery: (batteryData) => {
@@ -107,10 +125,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: generateId(),
       cycleCount: 0,
     };
-    set((state) => ({ batteries: [...state.batteries, newBattery] }));
+    const log: BatteryLog = {
+      id: generateId(),
+      batteryId: newBattery.id,
+      type: 'stock-in',
+      description: `新电池入库 - ${batteryData.serialNumber}`,
+      operator: '管理员',
+      createdAt: new Date().toLocaleString('zh-CN'),
+    };
+    set((state) => ({ 
+      batteries: [...state.batteries, newBattery],
+      batteryLogs: [log, ...state.batteryLogs],
+    }));
   },
 
   updateBatteryStatus: (id, status, swapCode) => {
+    const battery = get().batteries.find(b => b.id === id);
+    const log: BatteryLog = {
+      id: generateId(),
+      batteryId: id,
+      type: swapCode ? 'swap' : 'status-change',
+      description: swapCode ? `换电绑定 ${swapCode}` : `状态变更为 ${status}`,
+      operator: '管理员',
+      relatedId: swapCode,
+      createdAt: new Date().toLocaleString('zh-CN'),
+    };
     set((state) => ({
       batteries: state.batteries.map((b) =>
         b.id === id
@@ -119,14 +158,37 @@ export const useAppStore = create<AppState>((set, get) => ({
               status, 
               lastSwapTime: swapCode ? new Date().toISOString() : b.lastSwapTime,
               location: swapCode ? `换电编号: ${swapCode}` : b.location,
+              cycleCount: swapCode ? b.cycleCount + 1 : b.cycleCount,
             }
           : b
       ),
+      batteryLogs: [log, ...state.batteryLogs],
     }));
   },
 
   updateInventoryTime: () => {
-    set({ lastInventoryTime: new Date().toLocaleString('zh-CN') });
+    const now = new Date().toLocaleString('zh-CN');
+    const logs: BatteryLog[] = get().batteries.map(b => ({
+      id: generateId(),
+      batteryId: b.id,
+      type: 'inventory',
+      description: '库存盘点',
+      operator: '管理员',
+      createdAt: now,
+    }));
+    set({ 
+      lastInventoryTime: now,
+      batteryLogs: [...logs, ...get().batteryLogs],
+    });
+  },
+
+  addBatteryLog: (logData) => {
+    const log: BatteryLog = {
+      ...logData,
+      id: generateId(),
+      createdAt: new Date().toLocaleString('zh-CN'),
+    };
+    set((state) => ({ batteryLogs: [log, ...state.batteryLogs] }));
   },
 
   addTicket: (ticketData) => {
@@ -143,13 +205,55 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       tickets: state.tickets.map((t) =>
         t.id === id
-          ? { ...t, status, resolvedAt: status === 'resolved' ? new Date().toISOString() : t.resolvedAt }
+          ? { 
+              ...t, 
+              status, 
+              resolvedAt: status === 'resolved' ? new Date().toISOString() : t.resolvedAt,
+              lastProcessedAt: new Date().toISOString(),
+            }
+          : t
+      ),
+    }));
+  },
+
+  assignTicket: (id, assignee) => {
+    set((state) => ({
+      tickets: state.tickets.map((t) =>
+        t.id === id
+          ? { ...t, assignee, status: 'processing' as const, lastProcessedAt: new Date().toISOString() }
+          : t
+      ),
+    }));
+  },
+
+  addProcessNote: (id, note) => {
+    set((state) => ({
+      tickets: state.tickets.map((t) =>
+        t.id === id
+          ? { ...t, processNotes: note, lastProcessedAt: new Date().toISOString() }
+          : t
+      ),
+    }));
+  },
+
+  resolveTicket: (id, resolution) => {
+    set((state) => ({
+      tickets: state.tickets.map((t) =>
+        t.id === id
+          ? { 
+              ...t, 
+              status: 'resolved' as const, 
+              resolution, 
+              resolvedAt: new Date().toISOString(),
+              lastProcessedAt: new Date().toISOString(),
+            }
           : t
       ),
     }));
   },
 
   rechargeMember: (memberId, amount) => {
+    const member = get().members.find(m => m.id === memberId);
     set((state) => ({
       members: state.members.map((m) =>
         m.id === memberId ? { ...m, balance: m.balance + amount, points: m.points + Math.floor(amount) } : m
@@ -157,6 +261,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       transactions: [
         {
           id: generateId(),
+          memberId,
+          memberName: member?.name || '',
           type: 'recharge',
           amount,
           description: '账户充值',
@@ -168,6 +274,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   refundDeposit: (memberId, amount) => {
+    const member = get().members.find(m => m.id === memberId);
     set((state) => ({
       members: state.members.map((m) =>
         m.id === memberId ? { ...m, deposit: Math.max(0, m.deposit - amount) } : m
@@ -175,6 +282,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       transactions: [
         {
           id: generateId(),
+          memberId,
+          memberName: member?.name || '',
           type: 'refund',
           amount: -amount,
           description: '押金退还',
@@ -186,7 +295,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   updateMemberLevel: (memberId, level) => {
+    const member = get().members.find(m => m.id === memberId);
     const discountMap = { normal: 1, silver: 0.95, gold: 0.9, platinum: 0.85 };
+    const levelNames = { normal: '普通', silver: '银卡', gold: '金卡', platinum: '铂金' };
     set((state) => ({
       members: state.members.map((m) =>
         m.id === memberId ? { ...m, level, discountRate: discountMap[level] } : m
@@ -194,9 +305,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       transactions: [
         {
           id: generateId(),
+          memberId,
+          memberName: member?.name || '',
           type: 'adjust',
           amount: 0,
-          description: `会员等级调整为 ${level === 'normal' ? '普通' : level === 'silver' ? '银卡' : level === 'gold' ? '金卡' : '铂金'}`,
+          description: `会员等级调整为 ${levelNames[level]}`,
           createdAt: new Date().toLocaleString('zh-CN'),
         },
         ...state.transactions,
@@ -207,7 +320,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   settleRecord: (id) => {
     set((state) => ({
       records: state.records.map((r) =>
-        r.id === id ? { ...r, status: 'completed' as const } : r
+        r.id === id ? { ...r, settled: true } : r
       ),
     }));
   },

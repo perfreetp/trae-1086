@@ -6,12 +6,13 @@ import { getStatusText, getStatusColor, getServiceTypeText, formatCurrency, form
 import type { ChargingRecord } from '@/types';
 
 export default function ChargingRecords() {
-  const { records, settleRecord, applyInvoice } = useAppStore();
+  const { records, settleRecord, applyInvoice, completeRecord } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showSettleModal, setShowSettleModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<ChargingRecord | null>(null);
 
   const stats = useMemo(() => {
@@ -20,8 +21,22 @@ export default function ChargingRecords() {
     const chargingCount = todayRecords.filter(r => r.type === 'charging').length;
     const swapCount = todayRecords.filter(r => r.type === 'battery-swap').length;
     const inProgress = todayRecords.filter(r => r.status === 'charging').length;
-    return { totalAmount, chargingCount, swapCount, inProgress, total: todayRecords.length };
+    const unsettled = todayRecords.filter(r => r.status === 'completed' && !r.settled).length;
+    return { totalAmount, chargingCount, swapCount, inProgress, total: todayRecords.length, unsettled };
   }, [records]);
+
+  const handleComplete = (record: ChargingRecord) => {
+    setSelectedRecord(record);
+    setShowCompleteModal(true);
+  };
+
+  const confirmComplete = () => {
+    if (selectedRecord) {
+      completeRecord(selectedRecord.id);
+      setShowCompleteModal(false);
+      setSelectedRecord(null);
+    }
+  };
 
   const chartData = [
     { time: '08:00', orders: 5, revenue: 420 },
@@ -84,7 +99,7 @@ export default function ChargingRecords() {
         </button>
       </div>
 
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-6 gap-4">
         <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -123,6 +138,16 @@ export default function ChargingRecords() {
           </div>
           <p className="text-2xl font-bold text-orange-600">{stats.inProgress}</p>
           <p className="text-xs text-slate-500 mt-1">进行中</p>
+        </div>
+
+        <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-lg bg-yellow-100 flex items-center justify-center">
+              <CreditCard className="w-5 h-5 text-yellow-600" />
+            </div>
+          </div>
+          <p className="text-2xl font-bold text-yellow-600">{stats.unsettled}</p>
+          <p className="text-xs text-slate-500 mt-1">待结算</p>
         </div>
 
         <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
@@ -329,7 +354,16 @@ export default function ChargingRecords() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {record.status === 'charging' && (
+                        <button
+                          onClick={() => handleComplete(record)}
+                          className="px-3 py-1.5 bg-green-50 text-green-600 rounded-lg text-sm font-medium hover:bg-green-100 transition-colors flex items-center gap-1"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          完成
+                        </button>
+                      )}
                       {record.status === 'completed' && !record.settled && (
                         <button
                           onClick={() => handleSettle(record)}
@@ -339,13 +373,13 @@ export default function ChargingRecords() {
                           结算
                         </button>
                       )}
-                      {record.status === 'completed' && record.settled && !record.invoiceStatus && (
+                      {record.status === 'completed' && record.settled && record.invoiceStatus === 'none' && (
                         <button
                           onClick={() => handleApplyInvoice(record)}
-                          className="px-3 py-1.5 bg-green-50 text-green-600 rounded-lg text-sm font-medium hover:bg-green-100 transition-colors flex items-center gap-1"
+                          className="px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors flex items-center gap-1"
                         >
                           <FileText className="w-3.5 h-3.5" />
-                          发票
+                          申请发票
                         </button>
                       )}
                       {record.invoiceStatus === 'applied' && (
@@ -360,8 +394,10 @@ export default function ChargingRecords() {
                           已开票
                         </span>
                       )}
-                      {record.settled && record.status === 'completed' && !record.invoiceStatus && (
-                        <span className="text-xs text-slate-400">已结算</span>
+                      {record.settled && record.status === 'completed' && record.invoiceStatus === 'none' && (
+                        <span className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-sm font-medium">
+                          已结算
+                        </span>
                       )}
                     </div>
                   </td>
@@ -461,6 +497,52 @@ export default function ChargingRecords() {
                 className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:shadow-lg"
               >
                 提交申请
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCompleteModal && selectedRecord && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">确认完成订单</h3>
+              <button onClick={() => setShowCompleteModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div className="p-4 bg-green-50 rounded-xl">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-slate-500">订单编号</span>
+                  <span className="text-sm font-mono text-slate-700">{selectedRecord.id}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-slate-500">服务类型</span>
+                  <span className="text-sm text-slate-700">{getServiceTypeText(selectedRecord.type)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-500">订单金额</span>
+                  <span className="text-xl font-bold text-green-600">{formatCurrency(selectedRecord.amount)}</span>
+                </div>
+              </div>
+              <p className="text-sm text-slate-500">
+                确认完成后，订单将进入可结算状态，用户可以进行费用结算和发票申请。
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCompleteModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmComplete}
+                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:shadow-lg"
+              >
+                确认完成
               </button>
             </div>
           </div>
