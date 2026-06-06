@@ -88,11 +88,35 @@ export default function BatteryInventory() {
   }, [models, batteries]);
 
   const abnormalBatteries = useMemo(() => 
-    batteries.filter((b) => 
-      b.healthStatus < 85 || 
-      b.status === 'maintenance' ||
-      b.cycleCount > 300
-    ), [batteries]);
+    batteries.filter((b) => {
+      const lastInventory = batteryLogs
+        .filter(l => l.batteryId === b.id && l.type === 'inventory')
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      const daysSinceInventory = lastInventory 
+        ? Math.floor((new Date('2026-06-07').getTime() - new Date(lastInventory.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+        : 999;
+      return (
+        b.healthStatus < 85 || 
+        b.status === 'maintenance' ||
+        b.cycleCount > 300 ||
+        daysSinceInventory > 7
+      );
+    }), [batteries, batteryLogs]);
+
+  const getAbnormalReasons = (battery: BatteryType) => {
+    const reasons: string[] = [];
+    if (battery.healthStatus < 85) reasons.push(`健康度过低 (${battery.healthStatus}%)`);
+    if (battery.status === 'maintenance') reasons.push('维护中');
+    if (battery.cycleCount > 300) reasons.push(`循环次数过高 (${battery.cycleCount}次)`);
+    const lastInventory = batteryLogs
+      .filter(l => l.batteryId === battery.id && l.type === 'inventory')
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    const daysSinceInventory = lastInventory 
+      ? Math.floor((new Date('2026-06-07').getTime() - new Date(lastInventory.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+      : 999;
+    if (daysSinceInventory > 7) reasons.push(`长时间未盘点 (${daysSinceInventory}天)`);
+    return reasons;
+  };
 
   const displayBatteries = viewMode === 'abnormal' ? abnormalBatteries : filteredBatteries;
 
@@ -660,6 +684,21 @@ export default function BatteryInventory() {
               </button>
             </div>
             <div className="p-4 space-y-4">
+              {getAbnormalReasons(selectedBatteryForLog).length > 0 && (
+                <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                  <p className="text-xs font-medium text-orange-800 mb-2 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    异常原因
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {getAbnormalReasons(selectedBatteryForLog).map((reason, i) => (
+                      <span key={i} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
+                        {reason}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               {batteryLogsForSelected.length > 0 ? (
                 batteryLogsForSelected.map((log) => (
                   <div key={log.id} className="flex gap-4">

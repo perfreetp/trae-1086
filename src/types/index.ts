@@ -72,6 +72,9 @@ export interface ChargingRecord {
   status: 'charging' | 'completed' | 'failed';
   invoiceStatus?: 'none' | 'applied' | 'issued';
   settled?: boolean;
+  settlementNo?: string;
+  invoiceTitle?: string;
+  invoiceEmail?: string;
 }
 
 export interface Member {

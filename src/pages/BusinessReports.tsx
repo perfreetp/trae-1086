@@ -120,13 +120,15 @@ export default function BusinessReports() {
   }, [filteredRecords, hasData, members.length]);
 
   const financeStats = useMemo(() => {
-    const recordsInRange = hasData ? filteredRecords : records;
-    const unsettledAmount = recordsInRange.filter(r => !r.settled && r.status === 'completed')
+    if (!hasData) {
+      return { unsettledAmount: 0, pendingInvoiceAmount: 0 };
+    }
+    const unsettledAmount = filteredRecords.filter(r => !r.settled && r.status === 'completed')
       .reduce((sum, r) => sum + (r.amount || 0), 0);
-    const pendingInvoiceAmount = recordsInRange.filter(r => r.settled && r.invoiceStatus === 'none')
+    const pendingInvoiceAmount = filteredRecords.filter(r => r.settled && r.invoiceStatus === 'none')
       .reduce((sum, r) => sum + (r.amount || 0), 0);
     return { unsettledAmount, pendingInvoiceAmount };
-  }, [filteredRecords, hasData, records]);
+  }, [filteredRecords, hasData]);
 
   const siteUtilizationData = useMemo(() => {
     if (!hasData) return [];
@@ -347,25 +349,32 @@ export default function BusinessReports() {
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-800 mb-4">服务类型占比</h3>
           <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={revenueByType}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={90}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {revenueByType.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            {revenueByType.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={revenueByType}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {revenueByType.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                <BarChart3 className="w-12 h-12 mb-2 opacity-50" />
+                <p className="text-sm">暂无服务数据</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -374,15 +383,22 @@ export default function BusinessReports() {
         <div className="col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <h3 className="text-lg font-semibold text-slate-800 mb-4">站点利用率</h3>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={siteUtilizationData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="#94A3B8" />
-                <YAxis tick={{ fontSize: 12 }} stroke="#94A3B8" unit="%" />
-                <Tooltip />
-                <Bar dataKey="utilization" fill="#10B981" radius={[4, 4, 0, 0]} name="利用率" />
-              </BarChart>
-            </ResponsiveContainer>
+            {siteUtilizationData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={siteUtilizationData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="#94A3B8" />
+                  <YAxis tick={{ fontSize: 12 }} stroke="#94A3B8" unit="%" />
+                  <Tooltip />
+                  <Bar dataKey="utilization" fill="#10B981" radius={[4, 4, 0, 0]} name="利用率" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                <BarChart3 className="w-12 h-12 mb-2 opacity-50" />
+                <p className="text-sm">暂无站点数据</p>
+              </div>
+            )}
           </div>
         </div>
 

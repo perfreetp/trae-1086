@@ -6,14 +6,19 @@ import { getStatusText, getStatusColor, getServiceTypeText, formatCurrency, form
 import type { ChargingRecord } from '@/types';
 
 export default function ChargingRecords() {
-  const { records, settleRecord, applyInvoice, completeRecord } = useAppStore();
+  const { records, settleRecord, settleRecords, applyInvoice, applyInvoices, completeRecord } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showSettleModal, setShowSettleModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [showBatchSettleModal, setShowBatchSettleModal] = useState(false);
+  const [showBatchInvoiceModal, setShowBatchInvoiceModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<ChargingRecord | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [invoiceTitle, setInvoiceTitle] = useState('');
+  const [invoiceEmail, setInvoiceEmail] = useState('');
 
   const stats = useMemo(() => {
     const todayRecords = records.filter(r => r.startTime.includes('2026-06-07'));
@@ -80,10 +85,53 @@ export default function ChargingRecords() {
 
   const confirmInvoice = () => {
     if (selectedRecord) {
-      applyInvoice(selectedRecord.id);
+      applyInvoice(selectedRecord.id, invoiceTitle, invoiceEmail);
       setShowInvoiceModal(false);
       setSelectedRecord(null);
+      setInvoiceTitle('');
+      setInvoiceEmail('');
     }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredRecords.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredRecords.map((r) => r.id));
+    }
+  };
+
+  const selectedUnsettled = filteredRecords.filter((r) => selectedIds.includes(r.id) && r.status === 'completed' && !r.settled);
+  const selectedSettled = filteredRecords.filter((r) => selectedIds.includes(r.id) && r.settled && r.invoiceStatus === 'none');
+
+  const handleBatchSettle = () => {
+    setShowBatchSettleModal(true);
+  };
+
+  const confirmBatchSettle = () => {
+    settleRecords(selectedUnsettled.map((r) => r.id));
+    setShowBatchSettleModal(false);
+    setSelectedIds([]);
+  };
+
+  const handleBatchInvoice = () => {
+    setInvoiceTitle('');
+    setInvoiceEmail('');
+    setShowBatchInvoiceModal(true);
+  };
+
+  const confirmBatchInvoice = () => {
+    applyInvoices(selectedSettled.map((r) => r.id), invoiceTitle, invoiceEmail);
+    setShowBatchInvoiceModal(false);
+    setSelectedIds([]);
+    setInvoiceTitle('');
+    setInvoiceEmail('');
   };
 
   return (
@@ -295,10 +343,52 @@ export default function ChargingRecords() {
           </div>
         </div>
 
+        {selectedIds.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+            <span className="text-sm text-blue-700 font-medium">
+              已选择 {selectedIds.length} 条记录
+              {selectedUnsettled.length > 0 && ` · ${selectedUnsettled.length} 条待结算`}
+              {selectedSettled.length > 0 && ` · ${selectedSettled.length} 条可开票`}
+            </span>
+            <div className="flex gap-2">
+              {selectedUnsettled.length > 0 && (
+                <button
+                  onClick={handleBatchSettle}
+                  className="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600"
+                >
+                  批量结算
+                </button>
+              )}
+              {selectedSettled.length > 0 && (
+                <button
+                  onClick={handleBatchInvoice}
+                  className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600"
+                >
+                  批量申请发票
+                </button>
+              )}
+              <button
+                onClick={() => setSelectedIds([])}
+                className="px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-300"
+              >
+                取消选择
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-50">
               <tr>
+                <th className="px-6 py-3 text-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length === filteredRecords.length && filteredRecords.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-500 focus:ring-blue-500"
+                  />
+                </th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">订单信息</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">用户</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-slate-600 uppercase">站点</th>
@@ -311,7 +401,15 @@ export default function ChargingRecords() {
             </thead>
             <tbody className="divide-y divide-slate-200">
               {filteredRecords.map((record) => (
-                <tr key={record.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={record.id} className={`hover:bg-slate-50 transition-colors ${selectedIds.includes(record.id) ? 'bg-blue-50' : ''}`}>
+                  <td className="px-6 py-4 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(record.id)}
+                      onChange={() => toggleSelect(record.id)}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-500 focus:ring-blue-500"
+                    />
+                  </td>
                   <td className="px-6 py-4">
                     <div>
                       <p className="font-mono text-sm text-slate-700">{record.id}</p>
@@ -349,9 +447,17 @@ export default function ChargingRecords() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}>
-                      {getStatusText(record.status)}
-                    </span>
+                    <div className="space-y-1">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}>
+                        {getStatusText(record.status)}
+                      </span>
+                      {record.settled && record.settlementNo && (
+                        <p className="text-xs text-slate-500 font-mono">结算: {record.settlementNo}</p>
+                      )}
+                      {record.invoiceStatus === 'applied' && record.invoiceTitle && (
+                        <p className="text-xs text-orange-600">发票: {record.invoiceTitle}</p>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -471,7 +577,8 @@ export default function ChargingRecords() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">发票抬头</label>
                 <input
                   type="text"
-                  defaultValue="个人"
+                  value={invoiceTitle}
+                  onChange={(e) => setInvoiceTitle(e.target.value)}
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="请输入发票抬头"
                 />
@@ -480,6 +587,8 @@ export default function ChargingRecords() {
                 <label className="block text-sm font-medium text-slate-700 mb-2">电子邮箱</label>
                 <input
                   type="email"
+                  value={invoiceEmail}
+                  onChange={(e) => setInvoiceEmail(e.target.value)}
                   placeholder="用于接收电子发票"
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -543,6 +652,103 @@ export default function ChargingRecords() {
                 className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:shadow-lg"
               >
                 确认完成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showBatchSettleModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">批量结算</h3>
+              <button onClick={() => setShowBatchSettleModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-6">
+              <div className="p-4 bg-blue-50 rounded-xl mb-4">
+                <p className="text-sm text-slate-500 mb-1">待结算订单数</p>
+                <p className="text-2xl font-bold text-blue-700">{selectedUnsettled.length} 条</p>
+                <p className="text-sm text-slate-500 mt-2">
+                  总计金额: <span className="font-bold text-slate-800">
+                    {formatCurrency(selectedUnsettled.reduce((sum, r) => sum + r.amount, 0))}
+                  </span>
+                </p>
+              </div>
+              <p className="text-sm text-slate-600">确认后将对选中的 {selectedUnsettled.length} 条订单进行结算，生成结算单号。</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBatchSettleModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmBatchSettle}
+                className="flex-1 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:shadow-lg"
+              >
+                确认结算
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBatchInvoiceModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">批量申请发票</h3>
+              <button onClick={() => setShowBatchInvoiceModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div className="p-4 bg-green-50 rounded-xl">
+                <p className="text-sm text-slate-500 mb-1">可开票订单数</p>
+                <p className="text-2xl font-bold text-green-700">{selectedSettled.length} 条</p>
+                <p className="text-sm text-slate-500 mt-2">
+                  总计金额: <span className="font-bold text-slate-800">
+                    {formatCurrency(selectedSettled.reduce((sum, r) => sum + r.amount, 0))}
+                  </span>
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">发票抬头</label>
+                <input
+                  type="text"
+                  value={invoiceTitle}
+                  onChange={(e) => setInvoiceTitle(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="请输入发票抬头"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">接收邮箱</label>
+                <input
+                  type="email"
+                  value={invoiceEmail}
+                  onChange={(e) => setInvoiceEmail(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="用于接收电子发票"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBatchInvoiceModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmBatchInvoice}
+                disabled={!invoiceTitle || !invoiceEmail}
+                className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:shadow-lg disabled:opacity-50"
+              >
+                提交申请
               </button>
             </div>
           </div>

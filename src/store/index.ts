@@ -46,7 +46,9 @@ interface AppState {
   updateMemberLevel: (memberId: string, level: Member['level']) => void;
   
   settleRecord: (id: string) => void;
-  applyInvoice: (id: string) => void;
+  settleRecords: (ids: string[]) => void;
+  applyInvoice: (id: string, title?: string, email?: string) => void;
+  applyInvoices: (ids: string[], title?: string, email?: string) => void;
   
   updateDeviceStatus: (id: string, status: Device['status']) => void;
 }
@@ -365,17 +367,38 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   settleRecord: (id) => {
+    const settlementNo = 'SET' + Date.now().toString().slice(-8) + '01';
     set((state) => ({
       records: state.records.map((r) =>
-        r.id === id ? { ...r, settled: true } : r
+        r.id === id ? { ...r, settled: true, settlementNo } : r
       ),
     }));
   },
 
-  applyInvoice: (id) => {
+  settleRecords: (ids) => {
+    set((state) => ({
+      records: state.records.map((r, i) =>
+        ids.includes(r.id) ? { 
+          ...r, 
+          settled: true, 
+          settlementNo: 'SET' + Date.now().toString().slice(-8) + String(i + 1).padStart(2, '0')
+        } : r
+      ),
+    }));
+  },
+
+  applyInvoice: (id, title, email) => {
     set((state) => ({
       records: state.records.map((r) =>
-        r.id === id ? { ...r, invoiceStatus: 'applied' } : r
+        r.id === id ? { ...r, invoiceStatus: 'applied', invoiceTitle: title, invoiceEmail: email } : r
+      ),
+    }));
+  },
+
+  applyInvoices: (ids, title, email) => {
+    set((state) => ({
+      records: state.records.map((r) =>
+        ids.includes(r.id) ? { ...r, invoiceStatus: 'applied', invoiceTitle: title, invoiceEmail: email } : r
       ),
     }));
   },

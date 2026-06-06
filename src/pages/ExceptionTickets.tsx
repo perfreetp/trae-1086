@@ -448,7 +448,12 @@ export default function ExceptionTickets() {
                 </div>
                 <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between">
                   <span className="text-xs text-slate-400">类型: {getTicketTypeText(ticket.type)}</span>
-                  <button className="text-xs text-slate-600 font-medium hover:text-slate-800">查看</button>
+                  <button 
+                    onClick={() => handleViewDetail(ticket)}
+                    className="text-xs text-slate-600 font-medium hover:text-slate-800"
+                  >
+                    查看
+                  </button>
                 </div>
               </div>
             ))}
