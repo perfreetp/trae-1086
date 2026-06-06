@@ -17,7 +17,9 @@ export default function BookingQueue() {
   const {
     bookings,
     preselectedBookingSite,
+    preselectedServiceTypes,
     setPreselectedBookingSite,
+    setPreselectedServiceTypes,
     addBooking,
     updateBookingStatus,
     addRecord,
@@ -54,23 +56,48 @@ export default function BookingQueue() {
     return counts;
   }, [bookings, formData.siteId, dateFilter]);
 
-  useEffect(() => {
-    if (preselectedBookingSite) {
-      setFormData((prev) => ({
-        ...prev,
-        siteId: preselectedBookingSite.id,
-        siteName: preselectedBookingSite.name,
-      }));
-      setShowBookingModal(true);
-      setPreselectedBookingSite(null);
+  const availableServiceTypes = useMemo(() => {
+    if (preselectedServiceTypes && preselectedServiceTypes.length > 0) {
+      return preselectedServiceTypes;
     }
-  }, [preselectedBookingSite, setPreselectedBookingSite]);
+    if (formData.siteId) {
+      const site = sites.find(s => s.id === formData.siteId);
+      if (site) return site.serviceTypes;
+    }
+    return ['charging', 'battery-swap'] as const;
+  }, [preselectedServiceTypes, formData.siteId]);
 
   const pendingBookings = bookings.filter((b) => b.status === 'pending' || b.status === 'confirmed');
   const inProgressBookings = bookings.filter((b) => b.status === 'in-progress');
   const completedBookings = bookings.filter((b) =>
     ['completed', 'cancelled', 'no-show'].includes(b.status)
   );
+
+  useEffect(() => {
+    if (preselectedBookingSite) {
+      const defaultServiceType = preselectedServiceTypes?.[0] || 'charging';
+      setFormData((prev) => ({
+        ...prev,
+        siteId: preselectedBookingSite.id,
+        siteName: preselectedBookingSite.name,
+        serviceType: defaultServiceType,
+      }));
+      setShowBookingModal(true);
+      setPreselectedBookingSite(null);
+    }
+  }, [preselectedBookingSite, preselectedServiceTypes, setPreselectedBookingSite]);
+
+  useEffect(() => {
+    if (availableServiceTypes.length > 0 && !availableServiceTypes.includes(formData.serviceType)) {
+      setFormData(prev => ({ ...prev, serviceType: availableServiceTypes[0] }));
+    }
+  }, [availableServiceTypes, formData.serviceType]);
+
+  useEffect(() => {
+    return () => {
+      setPreselectedServiceTypes(null);
+    };
+  }, [setPreselectedServiceTypes]);
 
   const applyFilters = (list: Booking[]) => {
     return list.filter((b) => {
@@ -514,26 +541,30 @@ export default function BookingQueue() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">服务类型</label>
                 <div className="flex gap-3">
-                  <button
-                    onClick={() => setFormData((prev) => ({ ...prev, serviceType: 'charging' }))}
-                    className={`flex-1 py-2.5 px-4 rounded-lg font-medium border-2 transition-all ${
-                      formData.serviceType === 'charging'
-                        ? 'bg-blue-50 border-blue-500 text-blue-700'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    充电服务
-                  </button>
-                  <button
-                    onClick={() => setFormData((prev) => ({ ...prev, serviceType: 'battery-swap' }))}
-                    className={`flex-1 py-2.5 px-4 rounded-lg font-medium border-2 transition-all ${
-                      formData.serviceType === 'battery-swap'
-                        ? 'bg-green-50 border-green-500 text-green-700'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    换电服务
-                  </button>
+                  {availableServiceTypes.includes('charging') && (
+                    <button
+                      onClick={() => setFormData((prev) => ({ ...prev, serviceType: 'charging' }))}
+                      className={`flex-1 py-2.5 px-4 rounded-lg font-medium border-2 transition-all ${
+                        formData.serviceType === 'charging'
+                          ? 'bg-blue-50 border-blue-500 text-blue-700'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      充电服务
+                    </button>
+                  )}
+                  {availableServiceTypes.includes('battery-swap') && (
+                    <button
+                      onClick={() => setFormData((prev) => ({ ...prev, serviceType: 'battery-swap' }))}
+                      className={`flex-1 py-2.5 px-4 rounded-lg font-medium border-2 transition-all ${
+                        formData.serviceType === 'battery-swap'
+                          ? 'bg-green-50 border-green-500 text-green-700'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      换电服务
+                    </button>
+                  )}
                 </div>
               </div>
 

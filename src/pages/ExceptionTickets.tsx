@@ -13,6 +13,7 @@ export default function ExceptionTickets() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showResolveModal, setShowResolveModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [selectedProcessor, setSelectedProcessor] = useState('');
   const [processNote, setProcessNote] = useState('');
@@ -95,6 +96,11 @@ export default function ExceptionTickets() {
     setSelectedTicket(ticket);
     setResolution('');
     setShowResolveModal(true);
+  };
+
+  const handleViewDetail = (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    setShowDetailModal(true);
   };
 
   const handleConfirmResolve = () => {
@@ -290,7 +296,12 @@ export default function ExceptionTickets() {
                   </div>
                 )}
                 <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between">
-                  <span className="text-xs text-slate-500">类型: {getTicketTypeText(ticket.type)}</span>
+                  <button
+                    onClick={() => handleViewDetail(ticket)}
+                    className="text-xs text-slate-500 hover:text-slate-700 font-medium"
+                  >
+                    详情
+                  </button>
                   <button
                     onClick={() => handleAssign(ticket)}
                     className="text-xs text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1"
@@ -367,19 +378,26 @@ export default function ExceptionTickets() {
                 )}
                 <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
                   <button
-                    onClick={() => handleAddNote(ticket)}
-                    className="text-xs text-slate-600 font-medium hover:text-slate-800 flex items-center gap-1"
+                    onClick={() => handleViewDetail(ticket)}
+                    className="text-xs text-slate-500 hover:text-slate-700 font-medium"
                   >
-                    <MessageSquare className="w-3 h-3" />
-                    追加备注
+                    详情
                   </button>
-                  <button
-                    onClick={() => handleResolve(ticket)}
-                    className="text-xs text-green-600 font-medium hover:text-green-700 flex items-center gap-1"
-                  >
-                    完成
-                    <CheckCircle className="w-3 h-3" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleAddNote(ticket)}
+                      className="text-xs text-slate-600 font-medium hover:text-slate-800 flex items-center gap-1"
+                    >
+                      <MessageSquare className="w-3 h-3" />
+                      备注
+                    </button>
+                    <button
+                      onClick={() => handleResolve(ticket)}
+                      className="text-xs text-green-600 font-medium hover:text-green-700 flex items-center gap-1"
+                    >
+                      完成
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -712,6 +730,91 @@ export default function ExceptionTickets() {
               >
                 确认完成
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDetailModal && selectedTicket && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">工单详情</h3>
+                <p className="text-sm text-slate-500">#{selectedTicket.id}</p>
+              </div>
+              <button onClick={() => setShowDetailModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1 space-y-4">
+              <div className="p-4 bg-slate-50 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-slate-800">{selectedTicket.title}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(selectedTicket.priority)}`}>
+                    {getPriorityText(selectedTicket.priority)}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-600 mb-3">{selectedTicket.description}</p>
+                <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
+                  <div className="flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {selectedTicket.siteName}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <User className="w-3 h-3" />
+                    上报人: {selectedTicket.reporter}
+                  </div>
+                  {selectedTicket.assignee && (
+                    <div className="flex items-center gap-1">
+                      <Wrench className="w-3 h-3" />
+                      处理人: {selectedTicket.assignee}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {formatDateTime(selectedTicket.createdAt)}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-medium text-slate-800 mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-500" />
+                  处理记录
+                </h4>
+                <div className="space-y-3">
+                  {(selectedTicket.processLog || []).length > 0 ? (
+                    (selectedTicket.processLog || []).map((log) => (
+                      <div key={log.id} className="flex gap-3">
+                        <div className="relative">
+                          <div className={`w-2.5 h-2.5 rounded-full mt-1.5 ${
+                            log.type === 'assign' ? 'bg-blue-500' :
+                            log.type === 'note' ? 'bg-yellow-500' :
+                            'bg-green-500'
+                          }`} />
+                          <div className="absolute top-4 left-1 w-px h-full bg-slate-200" />
+                        </div>
+                        <div className="flex-1 pb-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium text-slate-700">
+                              {log.type === 'assign' ? '派工' : log.type === 'note' ? '处理备注' : '问题解决'}
+                            </span>
+                            <span className="text-xs text-slate-400">{log.createdAt}</span>
+                          </div>
+                          <p className="text-sm text-slate-600">{log.content}</p>
+                          <p className="text-xs text-slate-400 mt-1">操作人: {log.operator}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-slate-400">
+                      <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">暂无处理记录</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

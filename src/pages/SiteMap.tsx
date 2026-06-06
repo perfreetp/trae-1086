@@ -12,7 +12,7 @@ const timeSlots = ['08:00', '09:00', '10:00', '11:00', '14:00', '15:00', '16:00'
 
 export default function SiteMap() {
   const navigate = useNavigate();
-  const { setPreselectedBookingSite, devices, batteries, bookings } = useAppStore();
+  const { setPreselectedBookingSite, setPreselectedServiceTypes, devices, batteries, bookings } = useAppStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedSite, setSelectedSite] = useState<Site | null>(null);
@@ -50,6 +50,7 @@ export default function SiteMap() {
   const handleBookNow = () => {
     if (selectedSite) {
       setPreselectedBookingSite(selectedSite);
+      setPreselectedServiceTypes(selectedSite.serviceTypes);
       navigate('/bookings');
     }
   };

@@ -106,6 +106,15 @@ export interface Ticket {
   lastProcessedAt?: string;
   processNotes?: string;
   resolution?: string;
+  processLog?: TicketProcessLog[];
+}
+
+export interface TicketProcessLog {
+  id: string;
+  type: 'assign' | 'note' | 'resolve';
+  content: string;
+  operator: string;
+  createdAt: string;
 }
 
 export interface BatteryLog {

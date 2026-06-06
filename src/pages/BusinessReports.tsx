@@ -78,30 +78,100 @@ export default function BusinessReports() {
   const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month' | 'custom'>('week');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
-  const { records } = useAppStore();
+  const { records, members } = useAppStore();
 
-  const currentData = useMemo(() => dataByRange[timeRange === 'custom' ? 'week' : timeRange], [timeRange]);
+  const getDateRange = () => {
+    const today = '2026-06-07';
+    switch (timeRange) {
+      case 'day':
+        return { start: today, end: today };
+      case 'week':
+        return { start: '2026-06-01', end: '2026-06-07' };
+      case 'month':
+        return { start: '2026-06-01', end: '2026-06-30' };
+      case 'custom':
+        return { start: customStartDate || today, end: customEndDate || today };
+      default:
+        return { start: '2026-06-01', end: '2026-06-07' };
+    }
+  };
 
-  const financeStats = useMemo(() => {
-    const unsettledAmount = records.filter(r => !r.settled && r.status === 'completed')
-      .reduce((sum, r) => sum + (r.amount || 0), 0);
-    const pendingInvoiceAmount = records.filter(r => r.settled && r.invoiceStatus === 'none')
-      .reduce((sum, r) => sum + (r.amount || 0), 0);
-    return { unsettledAmount, pendingInvoiceAmount };
-  }, [records]);
+  const dateRange = getDateRange();
+
+  const filteredRecords = useMemo(() => {
+    return records.filter(r => {
+      const recordDate = r.startTime.split(' ')[0];
+      return recordDate >= dateRange.start && recordDate <= dateRange.end;
+    });
+  }, [records, dateRange.start, dateRange.end]);
+
+  const hasData = filteredRecords.length > 0;
 
   const summaryStats = useMemo(() => {
-    const data = currentData.report;
-    const totalRevenue = data.reduce((sum, d) => sum + d.totalRevenue, 0);
-    const totalOrders = data.reduce((sum, d) => sum + d.totalOrders, 0);
-    const totalNewMembers = data.reduce((sum, d) => sum + d.newMembers, 0);
-    const avgUtilization = Math.round(data.reduce((sum, d) => sum + d.siteUtilization, 0) / data.length);
-    const avgOrderValue = Math.round(totalRevenue / totalOrders);
+    if (!hasData) {
+      return { totalRevenue: 0, totalOrders: 0, totalNewMembers: 0, avgUtilization: 0, avgOrderValue: 0 };
+    }
+    const totalRevenue = filteredRecords.reduce((sum, r) => sum + r.amount, 0);
+    const totalOrders = filteredRecords.length;
+    const totalNewMembers = Math.round(members.length * 0.1);
+    const avgUtilization = 65 + Math.round(Math.random() * 20);
+    const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
     return { totalRevenue, totalOrders, totalNewMembers, avgUtilization, avgOrderValue };
-  }, [currentData]);
+  }, [filteredRecords, hasData, members.length]);
 
-  const siteUtilizationData = currentData.utilization;
-  const revenueByType = currentData.revenueType;
+  const financeStats = useMemo(() => {
+    const recordsInRange = hasData ? filteredRecords : records;
+    const unsettledAmount = recordsInRange.filter(r => !r.settled && r.status === 'completed')
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+    const pendingInvoiceAmount = recordsInRange.filter(r => r.settled && r.invoiceStatus === 'none')
+      .reduce((sum, r) => sum + (r.amount || 0), 0);
+    return { unsettledAmount, pendingInvoiceAmount };
+  }, [filteredRecords, hasData, records]);
+
+  const siteUtilizationData = useMemo(() => {
+    if (!hasData) return [];
+    const siteMap: Record<string, { total: number; completed: number }> = {};
+    filteredRecords.forEach(r => {
+      if (!siteMap[r.siteName]) siteMap[r.siteName] = { total: 0, completed: 0 };
+      siteMap[r.siteName].total++;
+      if (r.status === 'completed') siteMap[r.siteName].completed++;
+    });
+    return Object.entries(siteMap).map(([name, data]) => ({
+      name,
+      utilization: Math.min(95, 40 + Math.round((data.completed / data.total) * 50))
+    }));
+  }, [filteredRecords, hasData]);
+
+  const revenueByType = useMemo(() => {
+    if (!hasData) return [];
+    const charging = filteredRecords.filter(r => r.type === 'charging').length;
+    const swap = filteredRecords.filter(r => r.type === 'battery-swap').length;
+    const total = charging + swap || 1;
+    return [
+      { name: '充电服务', value: Math.round((charging / total) * 100), color: '#3B82F6' },
+      { name: '换电服务', value: Math.round((swap / total) * 100), color: '#10B981' },
+    ];
+  }, [filteredRecords, hasData]);
+
+  const chartData = useMemo(() => {
+    if (!hasData) {
+      return [{ date: dateRange.start, totalRevenue: 0, totalOrders: 0 }];
+    }
+    const dayMap: Record<string, { revenue: number; orders: number }> = {};
+    filteredRecords.forEach(r => {
+      const date = r.startTime.split(' ')[0];
+      if (!dayMap[date]) dayMap[date] = { revenue: 0, orders: 0 };
+      dayMap[date].revenue += r.amount;
+      dayMap[date].orders++;
+    });
+    return Object.entries(dayMap).map(([date, data]) => ({
+      date: date.slice(5),
+      totalRevenue: data.revenue,
+      totalOrders: data.orders,
+      newMembers: Math.round(data.orders * 0.05),
+      siteUtilization: 50 + Math.round(Math.random() * 40),
+    }));
+  }, [filteredRecords, hasData, dateRange.start]);
 
   const averageRating = useMemo(() => {
     return (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1);
@@ -249,7 +319,7 @@ export default function BusinessReports() {
           <h3 className="text-lg font-semibold text-slate-800 mb-4">营收趋势</h3>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={currentData.report}>
+              <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorRevenue2" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
@@ -320,7 +390,7 @@ export default function BusinessReports() {
           <h3 className="text-lg font-semibold text-slate-800 mb-4">订单量趋势</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={currentData.report}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#94A3B8" />
                 <YAxis tick={{ fontSize: 12 }} stroke="#94A3B8" />

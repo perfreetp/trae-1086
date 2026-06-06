@@ -29,6 +29,7 @@ export default function BatteryInventory() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [modelFilter, setModelFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'all' | 'abnormal'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [selectedBattery, setSelectedBattery] = useState<BatteryType | null>(null);
@@ -69,6 +70,8 @@ export default function BatteryInventory() {
     return matchesSearch && matchesStatus && matchesModel;
   });
 
+  const lowHealthBatteries = batteries.filter((b) => b.healthStatus < 85);
+
   const modelStats = useMemo(() => {
     return models.map((model) => {
       const modelBatteries = batteries.filter((b) => b.model === model);
@@ -84,7 +87,14 @@ export default function BatteryInventory() {
     });
   }, [models, batteries]);
 
-  const lowHealthBatteries = batteries.filter((b) => b.healthStatus < 85);
+  const abnormalBatteries = useMemo(() => 
+    batteries.filter((b) => 
+      b.healthStatus < 85 || 
+      b.status === 'maintenance' ||
+      b.cycleCount > 300
+    ), [batteries]);
+
+  const displayBatteries = viewMode === 'abnormal' ? abnormalBatteries : filteredBatteries;
 
   const handleInventory = () => {
     updateInventoryTime();
@@ -172,6 +182,37 @@ export default function BatteryInventory() {
             入库
           </button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setViewMode('all')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            viewMode === 'all'
+              ? 'bg-blue-500 text-white'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          全部电池
+        </button>
+        <button
+          onClick={() => setViewMode('abnormal')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+            viewMode === 'abnormal'
+              ? 'bg-orange-500 text-white'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          <AlertTriangle className="w-4 h-4" />
+          异常电池
+          {abnormalBatteries.length > 0 && (
+            <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+              viewMode === 'abnormal' ? 'bg-white/20' : 'bg-orange-100 text-orange-700'
+            }`}>
+              {abnormalBatteries.length}
+            </span>
+          )}
+        </button>
       </div>
 
       <div className="grid grid-cols-6 gap-4">
@@ -312,7 +353,7 @@ export default function BatteryInventory() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {filteredBatteries.map((battery) => (
+                {displayBatteries.map((battery) => (
                   <tr key={battery.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4">
                       <span className="font-mono text-sm text-slate-700">{battery.serialNumber}</span>

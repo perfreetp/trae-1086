@@ -18,11 +18,13 @@ interface AppState {
   sites: Site[];
   selectedSiteId: string | null;
   preselectedBookingSite: Site | null;
+  preselectedServiceTypes: ('charging' | 'battery-swap')[] | null;
   transactions: Transaction[];
   batteryLogs: BatteryLog[];
   lastInventoryTime: string;
   
   setPreselectedBookingSite: (site: Site | null) => void;
+  setPreselectedServiceTypes: (types: ('charging' | 'battery-swap')[] | null) => void;
   addBooking: (booking: Omit<Booking, 'id' | 'queueNumber' | 'createdAt' | 'estimatedWaitTime'>) => void;
   updateBookingStatus: (id: string, status: Booking['status']) => void;
   addRecord: (record: Omit<ChargingRecord, 'id'>) => void;
@@ -61,18 +63,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   sites: initialSites,
   selectedSiteId: null,
   preselectedBookingSite: null,
+  preselectedServiceTypes: null,
   transactions: [
     { id: '1', memberId: 'U001', memberName: '张晓明', type: 'recharge', amount: 500, description: '账户充值', createdAt: '2026-06-06 10:30' },
     { id: '2', memberId: 'U001', memberName: '张晓明', type: 'consume', amount: 58.5, description: '充电服务消费', createdAt: '2026-06-06 14:20' },
     { id: '3', memberId: 'U002', memberName: '李华', type: 'deposit', amount: 1000, description: '电池押金', createdAt: '2026-06-05 09:15' },
   ],
   batteryLogs: [
-    { id: '1', batteryId: 'B001', type: 'stock-in', description: '新电池入库', operator: '系统', createdAt: '2026-06-05 08:00' },
-    { id: '2', batteryId: 'B001', type: 'swap', description: '换电绑定 SW-20260606-001', operator: '张晓明', relatedId: 'SW-20260606-001', createdAt: '2026-06-06 10:30' },
+    ...['BAT001', 'BAT002', 'BAT003', 'BAT004', 'BAT005', 'BAT006', 'BAT007', 'BAT008', 'BAT009', 'BAT010', 'BAT011', 'BAT012', 'BAT013', 'BAT014', 'BAT015'].map((id, i) => ({
+      id: `log-stock-${i}`,
+      batteryId: id,
+      type: 'stock-in' as const,
+      description: '新电池入库',
+      operator: '系统',
+      createdAt: `2026-05-${String(20 + i).padStart(2, '0')} 08:00`,
+    })),
+    { id: 'log-swap-1', batteryId: 'BAT001', type: 'swap', description: '换电绑定 SW-20260606-001', operator: '张晓明', relatedId: 'SW-20260606-001', createdAt: '2026-06-06 10:30' },
+    { id: 'log-inv-1', batteryId: 'BAT003', type: 'inventory', description: '库存盘点', operator: '管理员', createdAt: '2026-06-06 18:00' },
   ],
   lastInventoryTime: '2026-06-06 18:00',
 
   setPreselectedBookingSite: (site) => set({ preselectedBookingSite: site }),
+  setPreselectedServiceTypes: (types) => set({ preselectedServiceTypes: types }),
 
   addBooking: (bookingData) => {
     const { bookings } = get();
@@ -217,26 +229,60 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   assignTicket: (id, assignee) => {
+    const now = new Date().toLocaleString('zh-CN');
+    const logEntry = {
+      id: generateId(),
+      type: 'assign' as const,
+      content: `分配给 ${assignee} 处理`,
+      operator: '系统',
+      createdAt: now,
+    };
     set((state) => ({
       tickets: state.tickets.map((t) =>
         t.id === id
-          ? { ...t, assignee, status: 'processing' as const, lastProcessedAt: new Date().toISOString() }
+          ? { 
+              ...t, 
+              assignee, 
+              status: 'processing' as const, 
+              lastProcessedAt: now,
+              processLog: [...(t.processLog || []), logEntry],
+            }
           : t
       ),
     }));
   },
 
   addProcessNote: (id, note) => {
+    const now = new Date().toLocaleString('zh-CN');
+    const logEntry = {
+      id: generateId(),
+      type: 'note' as const,
+      content: note,
+      operator: '处理人',
+      createdAt: now,
+    };
     set((state) => ({
       tickets: state.tickets.map((t) =>
         t.id === id
-          ? { ...t, processNotes: note, lastProcessedAt: new Date().toISOString() }
+          ? { 
+              ...t, 
+              lastProcessedAt: now,
+              processLog: [...(t.processLog || []), logEntry],
+            }
           : t
       ),
     }));
   },
 
   resolveTicket: (id, resolution) => {
+    const now = new Date().toLocaleString('zh-CN');
+    const logEntry = {
+      id: generateId(),
+      type: 'resolve' as const,
+      content: resolution,
+      operator: '处理人',
+      createdAt: now,
+    };
     set((state) => ({
       tickets: state.tickets.map((t) =>
         t.id === id
@@ -244,8 +290,9 @@ export const useAppStore = create<AppState>((set, get) => ({
               ...t, 
               status: 'resolved' as const, 
               resolution, 
-              resolvedAt: new Date().toISOString(),
-              lastProcessedAt: new Date().toISOString(),
+              resolvedAt: now,
+              lastProcessedAt: now,
+              processLog: [...(t.processLog || []), logEntry],
             }
           : t
       ),
